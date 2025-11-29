@@ -1,10 +1,14 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Message, MessageType, Product, UserState } from './types';
 import ConsumptionVisualizer from './components/ConsumptionVisualizer';
 import ProductCarousel from './components/ProductCarousel';
 import BillPredictor from './components/BillPredictor';
+import DateSelector from './components/DateSelector';
+import OfferSuccess from './components/OfferSuccess';
 import { Zap, Send, Loader2 } from 'lucide-react';
 import { generateChatResponse } from './services/geminiService';
+import ReactMarkdown from 'react-markdown';
 
 const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -18,6 +22,20 @@ const App: React.FC = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [isAppLoading, setIsAppLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [sessionId, setSessionId] = useState<string>("");
+
+  // Widget State
+  const [activeWidget, setActiveWidget] = useState<{type: string, data?: any} | null>(null);
+
+  // Initialize Session ID
+  useEffect(() => {
+      let storedSession = localStorage.getItem('session_id');
+      if (!storedSession) {
+          storedSession = 'user-' + Math.random().toString(36).substr(2, 9);
+          localStorage.setItem('session_id', storedSession);
+      }
+      setSessionId(storedSession);
+  }, []);
 
   const addMessage = (msg: Omit<Message, 'id' | 'timestamp'>) => {
     const newMessage: Message = {
@@ -34,44 +52,14 @@ const App: React.FC = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isTyping]);
+  }, [messages, isTyping, activeWidget]);
 
-  // Initial App Load Simulator
+  // Initial App Load
   useEffect(() => {
-      // Simulate initial connection
       const timer = setTimeout(() => {
           setIsAppLoading(false);
-          // Start typing immediately after load
-          setIsTyping(true);
-          
-          // Bot welcome sequence
-          setTimeout(() => {
-            addMessage({
-                type: MessageType.TEXT,
-                sender: 'bot',
-                text: "Hallo! Ich bin Sparky, Ihr intelligenter Energieberater. Lassen Sie uns den perfekten Ökostrom-Tarif für Ihr Zuhause finden."
-            });
-            
-            // Second message sequence
-            setTimeout(() => {
-                addMessage({
-                    type: MessageType.TEXT,
-                    sender: 'bot',
-                    text: "Um zu beginnen, muss ich Ihren jährlichen Energieverbrauch verstehen. Nutzen Sie dazu den Visualisierer unten."
-                });
-                
-                // Widget sequence
-                setTimeout(() => {
-                    addMessage({
-                        type: MessageType.INPUT_CONSUMPTION,
-                        sender: 'bot',
-                    });
-                    setIsTyping(false);
-                }, 600);
-                
-            }, 1200);
-
-          }, 1000);
+          // Send initial "Hello" to backend to trigger start state
+          handleSendMessage(undefined, "Hallo");
       }, 1500);
 
       return () => clearTimeout(timer);
@@ -80,68 +68,32 @@ const App: React.FC = () => {
   // Handlers for interactive widgets
   const handleConsumptionConfirm = (consumption: number, householdSize: number) => {
     setUserState(prev => ({ ...prev, consumption, householdSize }));
+    setActiveWidget(null); // Hide widget after use
     
-    // Add user feedback message
-    addMessage({
-        type: MessageType.TEXT,
-        sender: 'user',
-        text: `Ich verbrauche etwa ${consumption} kWh/Jahr.`
-    });
-
-    setIsTyping(true);
-    setTimeout(() => {
-        addMessage({
-            type: MessageType.TEXT,
-            sender: 'bot',
-            text: `Verstanden! Basierend auf einem ${householdSize}-Personen-Haushalt mit ${consumption} kWh Verbrauch habe ich diese passenden Pläne gefunden:`
-        });
-        setTimeout(() => {
-            addMessage({
-                type: MessageType.PRODUCT_SELECTION,
-                sender: 'bot',
-            });
-            setIsTyping(false);
-        }, 500);
-    }, 1200);
+    // Send data to backend
+    handleSendMessage(undefined, `Verbrauch: ${consumption} kWh`);
   };
 
   const handleProductSelect = (product: Product) => {
     setUserState(prev => ({ ...prev, selectedProductId: product.id }));
+    setActiveWidget(null);
     
-    setIsTyping(true);
-    setTimeout(() => {
-        addMessage({
-            type: MessageType.SIMULATION_RESULT,
-            sender: 'bot',
-            data: { product, consumption: userState.consumption }
-        });
-        setIsTyping(false);
-    }, 800);
+    // Send selection to backend
+    handleSendMessage(undefined, `Ich wähle ${product.name}`);
   };
 
   const handleSecureOffer = () => {
-      addMessage({
-          type: MessageType.TEXT,
-          sender: 'user',
-          text: "Ich möchte diesen Preis sichern."
-      });
-      setIsTyping(true);
-      setTimeout(() => {
-          addMessage({
-              type: MessageType.TEXT,
-              sender: 'bot',
-              text: "Gute Wahl! Ich erstelle jetzt Ihr offizielles Angebot. Sie können mir jetzt gerne noch Fragen zu Ihrem Vertrag stellen."
-          });
-          setIsTyping(false);
-      }, 2000);
+      setActiveWidget(null);
+      handleSendMessage(undefined, "Ich möchte diesen Preis sichern.");
   };
 
-  const handleSendMessage = async (e?: React.FormEvent) => {
+  const handleSendMessage = async (e?: React.FormEvent, overrideText?: string) => {
       if (e) e.preventDefault();
-      if (!inputValue.trim()) return;
+      
+      const text = overrideText || inputValue;
+      if (!text.trim()) return;
 
-      const text = inputValue;
-      setInputValue("");
+      if (!overrideText) setInputValue("");
       
       addMessage({
           type: MessageType.TEXT,
@@ -152,14 +104,48 @@ const App: React.FC = () => {
       setIsTyping(true);
 
       try {
-        const response = await generateChatResponse(messages, userState, text);
+        // Call backend
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: sessionId || localStorage.getItem('session_id') || 'user-fallback',
+                message: text,
+                channel: 'web'
+            })
+        });
+        
+        const data = await response.json();
+        console.log("API Response:", data); // Debug log
+        
         addMessage({
             type: MessageType.TEXT,
             sender: 'bot',
-            text: response
+            text: data.reply,
+            quickReplies: data.quick_replies
         });
+
+        // Handle UI Data from Backend
+        if (data.ui_data) {
+            setActiveWidget(data.ui_data);
+            
+            // Add a placeholder message for the widget if needed
+            if (data.ui_data.type === 'consumption_input') {
+                addMessage({ type: MessageType.INPUT_CONSUMPTION, sender: 'bot' });
+            } else if (data.ui_data.type === 'product_selection') {
+                addMessage({ type: MessageType.PRODUCT_SELECTION, sender: 'bot', data: data.ui_data.products });
+            } else if (data.ui_data.type === 'simulation_result') {
+                addMessage({ type: MessageType.SIMULATION_RESULT, sender: 'bot', data: data.ui_data.data });
+            } else if (data.ui_data.type === 'date_input') {
+                addMessage({ type: MessageType.INPUT_DATE, sender: 'bot' });
+            } else if (data.ui_data.type === 'offer_success') {
+                addMessage({ type: MessageType.OFFER_SUCCESS, sender: 'bot', data: data.ui_data });
+            }
+        }
+
       } catch (error) {
           console.error(error);
+          addMessage({ type: MessageType.TEXT, sender: 'bot', text: "Fehler bei der Verbindung." });
       } finally {
           setIsTyping(false);
       }
@@ -169,24 +155,63 @@ const App: React.FC = () => {
     switch (msg.type) {
       case MessageType.TEXT:
         return (
-          <div className={`p-4 rounded-2xl max-w-[85%] animate-slide-up shadow-sm ${
-            msg.sender === 'user' 
-              ? 'bg-energy-teal text-energy-900 ml-auto rounded-tr-sm' 
-              : 'bg-white/10 text-white mr-auto rounded-tl-sm backdrop-blur-md border border-white/5'
-          }`}>
-            {msg.text}
+
+          <div className="flex flex-col gap-2 max-w-[85%] animate-slide-up">
+            <div className={`p-4 rounded-2xl shadow-sm ${
+              msg.sender === 'user' 
+                ? 'bg-energy-teal text-energy-900 ml-auto rounded-tr-sm' 
+                : 'bg-white/10 text-white mr-auto rounded-tl-sm backdrop-blur-md border border-white/5'
+            }`}>
+              <div className="text-sm leading-relaxed">
+                <ReactMarkdown 
+                  components={{
+                    p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
+                    ul: ({node, ...props}) => <ul className="list-disc pl-4 mb-2 space-y-1" {...props} />,
+                    li: ({node, ...props}) => <li className="text-white/90" {...props} />,
+                    strong: ({node, ...props}) => <strong className="font-bold text-energy-teal" {...props} />
+                  }}
+                >
+                  {msg.text || ''}
+                </ReactMarkdown>
+              </div>
+            </div>
+            
+            {msg.quickReplies && (
+              <div className="flex flex-wrap gap-2 mt-1">
+                {msg.quickReplies.map(reply => (
+                  <button
+                    key={reply}
+                    onClick={() => handleSendMessage(undefined, reply)}
+                    className="text-xs px-3 py-1.5 rounded-full bg-white/5 hover:bg-energy-teal/20 hover:text-energy-teal hover:border-energy-teal/50 text-gray-300 border border-white/10 transition-all"
+                  >
+                    {reply}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         );
       case MessageType.INPUT_CONSUMPTION:
         return <ConsumptionVisualizer onConfirm={handleConsumptionConfirm} />;
       case MessageType.PRODUCT_SELECTION:
-        return <ProductCarousel userConsumption={userState.consumption} onSelectProduct={handleProductSelect} />;
+        // Use data from message if available (from backend)
+        return <ProductCarousel userConsumption={userState.consumption} onSelectProduct={handleProductSelect} products={msg.data} />;
       case MessageType.SIMULATION_RESULT:
         return (
             <BillPredictor 
                 product={msg.data.product} 
                 consumption={msg.data.consumption} 
                 onSecure={handleSecureOffer} 
+            />
+        );
+      case MessageType.INPUT_DATE:
+        return <DateSelector onDateSubmit={(date) => handleSendMessage(undefined, date)} />;
+      case MessageType.OFFER_SUCCESS:
+        return (
+            <OfferSuccess 
+                offerId={msg.data.offer_id} 
+                productName={msg.data.product_name} 
+                onReset={() => window.location.reload()} 
             />
         );
       default:
@@ -236,7 +261,11 @@ const App: React.FC = () => {
             {/* Chat Area */}
             <main className="flex-1 overflow-y-auto p-4 space-y-6 hide-scrollbar scroll-smooth">
                 {messages.map((msg) => (
-                    <div key={msg.id} className={`w-full flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div key={msg.id} className={`w-full flex ${
+                        msg.type === MessageType.TEXT 
+                            ? (msg.sender === 'user' ? 'justify-end' : 'justify-start')
+                            : 'justify-center my-4' // Center widgets and add vertical spacing
+                    }`}>
                         {renderMessageContent(msg)}
                     </div>
                 ))}
@@ -253,7 +282,7 @@ const App: React.FC = () => {
             {/* Input Area */}
             <div className="p-4 bg-energy-900/80 backdrop-blur-md border-t border-white/5 shrink-0 z-20">
                 <form 
-                    onSubmit={handleSendMessage}
+                    onSubmit={(e) => handleSendMessage(e)}
                     className="flex items-center gap-2 bg-white/5 p-1.5 pl-4 rounded-full border border-white/10 focus-within:border-energy-teal/50 focus-within:bg-white/10 transition-all"
                 >
                     <input 

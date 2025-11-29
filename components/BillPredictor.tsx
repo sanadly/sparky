@@ -90,7 +90,7 @@ const BillPredictor: React.FC<Props> = ({ product, consumption, onSecure }) => {
               <span className="font-mono text-white">{simulation.breakdown.usageCost.toFixed(2)} €</span>
           </div>
           <div className="text-[10px] text-gray-500 text-right pt-2 border-t border-white/5">
-              Basis: {product.workingPrice} ct/kWh Arbeitspreis
+              Basis: {product.workingPrice.toFixed(2)} ct/kWh Arbeitspreis
           </div>
       </div>
 

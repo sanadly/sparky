@@ -6,10 +6,13 @@ import ProductCard from './ProductCard';
 interface Props {
   userConsumption: number;
   onSelectProduct: (product: Product) => void;
+  products?: Product[];
 }
 
-const ProductCarousel: React.FC<Props> = ({ userConsumption, onSelectProduct }) => {
+const ProductCarousel: React.FC<Props> = ({ userConsumption, onSelectProduct, products }) => {
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
+
+  const displayProducts = products && products.length > 0 ? products : MOCK_PRODUCTS;
 
   const handleSelect = (product: Product) => {
     setSelectedId(product.id);
@@ -20,7 +23,7 @@ const ProductCarousel: React.FC<Props> = ({ userConsumption, onSelectProduct }) 
     <div className="w-full animate-slide-up">
       <h3 className="text-lg text-energy-teal font-bold mb-3 pl-4">Empfohlene Tarife</h3>
       <div className="flex overflow-x-auto gap-4 px-4 pb-8 pt-4 hide-scrollbar snap-x snap-mandatory">
-        {MOCK_PRODUCTS.map(product => (
+        {displayProducts.map(product => (
           <ProductCard 
             key={product.id}
             product={product}

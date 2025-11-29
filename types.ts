@@ -1,8 +1,10 @@
 export enum MessageType {
   TEXT = 'TEXT',
   INPUT_CONSUMPTION = 'INPUT_CONSUMPTION',
-  PRODUCT_SELECTION = 'PRODUCT_SELECTION',
-  SIMULATION_RESULT = 'SIMULATION_RESULT',
+  PRODUCT_SELECTION = 'product_selection',
+  SIMULATION_RESULT = 'simulation_result',
+  INPUT_DATE = 'input_date',
+  OFFER_SUCCESS = 'offer_success'
 }
 
 export interface Message {
@@ -12,6 +14,7 @@ export interface Message {
   text?: string;
   data?: any; // For holding widget state
   timestamp: number;
+  quickReplies?: string[];
 }
 
 export interface Product {
@@ -19,6 +22,7 @@ export interface Product {
   name: string;
   basePrice: number; // EUR/Year
   workingPrice: number; // Cents/kWh
+  totalPrice?: number; // Estimated total for 2500 kWh
   isGreen: boolean;
   contractDuration: number; // Months
   description: string;

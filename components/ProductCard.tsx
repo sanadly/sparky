@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Product } from '../types';
 import { Leaf, Zap, Check } from 'lucide-react';
 import { generateProductPitch } from '../services/geminiService';
+import ReactMarkdown from 'react-markdown';
 
 interface Props {
   product: Product;
@@ -53,24 +54,41 @@ const ProductCard: React.FC<Props> = ({ product, userConsumption, onSelect, isSe
         <h4 className="text-xl font-bold text-white mb-2 leading-tight">{product.name}</h4>
         
         {/* Gemini Generated Pitch */}
-        <div className="text-xs text-energy-teal italic mb-4 h-10 overflow-hidden">
-            "{pitch}"
+        {/* Gemini Generated Pitch */}
+        <div className="mb-4 min-h-[60px]">
+           <div className="text-xs text-gray-300 bg-white/5 p-3 rounded-xl border border-white/5 leading-relaxed">
+              <ReactMarkdown
+                  components={{
+                      p: ({node, ...props}) => <p className="m-0" {...props} />,
+                      strong: ({node, ...props}) => <span className="text-energy-teal font-bold" {...props} />
+                  }}
+              >
+                  {pitch}
+              </ReactMarkdown>
+           </div>
         </div>
       </div>
 
       {/* Pricing Visuals */}
       <div className="space-y-4">
-        {/* Base Price */}
-        <div className="bg-black/20 p-3 rounded-lg flex justify-between items-center backdrop-blur-sm">
-          <span className="text-sm text-gray-400">Grundpreis</span>
-          <span className="font-mono text-white">{product.basePrice}€<span className="text-xs text-gray-500">/Jahr</span></span>
-        </div>
-
-        {/* Working Price */}
-        <div className="bg-black/20 p-3 rounded-lg flex justify-between items-center backdrop-blur-sm">
-          <span className="text-sm text-gray-400">Arbeitspreis</span>
-          <span className="font-mono text-white">{product.workingPrice}<span className="text-xs text-gray-500">ct/kWh</span></span>
-        </div>
+        {(product.basePrice > 0 || product.workingPrice > 0) ? (
+          <>
+            <div className="bg-black/20 p-3 rounded-lg flex justify-between items-center backdrop-blur-sm">
+              <span className="text-sm text-gray-400">Grundpreis</span>
+              <span className="font-mono text-white">{(product.basePrice || 0).toFixed(2)}€<span className="text-xs text-gray-500">/Jahr</span></span>
+            </div>
+            <div className="bg-black/20 p-3 rounded-lg flex justify-between items-center backdrop-blur-sm">
+              <span className="text-sm text-gray-400">Arbeitspreis</span>
+              <span className="font-mono text-white">{(product.workingPrice || 0).toFixed(2)}<span className="text-xs text-gray-500">ct/kWh</span></span>
+            </div>
+          </>
+        ) : (
+          <div className="bg-black/20 p-4 rounded-lg flex flex-col items-center justify-center backdrop-blur-sm h-[108px]">
+             <span className="text-sm text-gray-400 mb-1">Geschätzte Kosten</span>
+             <span className="font-mono text-2xl text-white font-bold">{(product.totalPrice || 0).toFixed(2)} €</span>
+             <span className="text-xs text-gray-500">pro Jahr (bei 2500 kWh)</span>
+          </div>
+        )}
       </div>
 
       {/* Action Area */}
