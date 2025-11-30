@@ -134,7 +134,16 @@ class ChatService:
             product_name = next((p.get('bezeichnung') or p.get('name') for p in products if p.get('produktId') == product_id), "Gewählter Tarif")
             session["data"]["product_name"] = product_name
             
-            return await self._run_simulation(session)
+            # Check if we have consumption
+            if "consumption" in session["data"]:
+                return await self._run_simulation(session)
+            else:
+                session["state"] = STATE_WAITING_FOR_CONSUMPTION
+                return {
+                    "reply": f"Gute Wahl! Der {product_name} ist ein toller Tarif. Um dir den genauen Preis zu sagen, brauche ich noch deinen Jahresverbrauch in kWh.",
+                    "state": STATE_WAITING_FOR_CONSUMPTION,
+                    "ui_data": {"type": "consumption_input"}
+                }
 
         # State Machine
         if state == STATE_START:
@@ -273,7 +282,7 @@ class ChatService:
             
             session["state"] = STATE_WAITING_FOR_PRODUCT_CHOICE
             return {
-                "reply": f"Verstanden, {entities['consumption']} kWh. Welchen der Tarife möchtest du wählen?",
+                "reply": f"Verstanden, **{entities['consumption']} kWh**. Welchen der Tarife möchtest du wählen?",
                 "state": STATE_WAITING_FOR_PRODUCT_CHOICE,
                 "ui_data": self._get_product_ui_data(session["data"].get("products", []))
             }
@@ -316,7 +325,7 @@ class ChatService:
         if intent == "correction" and "consumption" in extraction:
             data["consumption"] = extraction["consumption"]
             return {
-                "reply": f"Okay, ich korrigiere den Verbrauch auf {data['consumption']} kWh. Welchen Tarif möchtest du wählen?",
+                "reply": f"Okay, ich korrigiere den Verbrauch auf **{data['consumption']} kWh**. Welchen Tarif möchtest du wählen?",
                 "ui_data": self._get_product_ui_data(data.get("products", []))
             }
             
@@ -442,7 +451,7 @@ class ChatService:
                     session["data"] = {}
                     
                     return {
-                        "reply": f"Geschafft! 🎉 Hier ist dein Angebot: {offer_id}",
+                        "reply": f"Geschafft! 🎉 Hier ist dein Angebot: **{offer_id}**",
                         "state": STATE_OFFER_CREATED,
                         "ui_data": {
                             "type": "offer_success", 
@@ -610,10 +619,22 @@ class ChatService:
                 logger.warning(f"Fallback price calculation failed: {e}")
                 price = None
 
-        price_text = f"{price:.2f}€" if price is not None else "auf Anfrage"
+        total_price = price if price is not None else 0.0
+        monthly_price = total_price / 12 if total_price > 0 else 0.0
+        
+        # Format nicely
+        monthly_str = f"{monthly_price:.2f}".replace('.', ',')
+        yearly_str = f"{total_price:.2f}".replace('.', ',')
+        
+        response_text = (
+            f"📊 **Dein Ergebnis für {product_name}:**\n\n"
+            f"📅 Monatlich: **{monthly_str} €**\n"
+            f"🗓️ Jährlich: **{yearly_str} €**\n\n"
+            f"Soll ich das Angebot für dich erstellen?"
+        )
         
         return {
-            "reply": f"Der Tarif {product_name} kostet dich ca. {price_text} im Jahr. Möchtest du ein Angebot?",
+            "reply": response_text,
             "state": STATE_SIMULATION_DONE,
             "ui_data": {
                 "type": "simulation_result",

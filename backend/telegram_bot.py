@@ -22,7 +22,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
         
     await update.message.reply_text(
-        '👋 **Hallo!** Ich bin dein Vertriebs-Bot.\n\nSchreib mir einfach "Hallo" oder "Tarife", um zu starten.',
+        '👋 **Hallo!** Ich bin dein Vertriebs-Bot.\n\nIch helfe dir, den perfekten Stromtarif zu finden. ⚡\n\nSchreib mir einfach "Hallo" oder "Tarife", um zu starten.',
         parse_mode=constants.ParseMode.MARKDOWN
     )
 
@@ -61,10 +61,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 for p in products:
                     p_name = p.get("name", "Produkt")
                     p_id = p.get("id")
-                    keyboard.append([InlineKeyboardButton(f"⚡ {p_name} ({p.get('workingPrice')} ct/kWh)", callback_data=f"prod:{p_id}")])
+                    is_green = p.get("isGreen", False)
+                    icon = "🌱" if is_green else "⚡"
+                    
+                    try:
+                        price = float(p.get('workingPrice', 0))
+                        price_str = f"{price:.2f}".replace('.', ',')
+                    except:
+                        price_str = str(p.get('workingPrice'))
+                        
+                    keyboard.append([InlineKeyboardButton(f"{icon} {p_name} ({price_str} ct/kWh)", callback_data=f"prod:{p_id}")])
                 reply_markup = InlineKeyboardMarkup(keyboard)
             
             elif ui_type == "consumption_input":
+                reply_text += "\n\n💡 *Tipp:* Du kannst auch einfach eine Zahl eintippen (z.B. 3200)."
                 keyboard = [
                     [InlineKeyboardButton("1500 kWh", callback_data="cons:1500"), InlineKeyboardButton("2500 kWh", callback_data="cons:2500")],
                     [InlineKeyboardButton("3500 kWh", callback_data="cons:3500"), InlineKeyboardButton("5000 kWh", callback_data="cons:5000")]
@@ -72,9 +82,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 
             elif ui_type == "date_input":
+                reply_text += "\n\n📅 *Wann soll der Vertrag starten?*"
                 keyboard = [
-                    [InlineKeyboardButton("Morgen", callback_data="date:tomorrow"), InlineKeyboardButton("01.01.2026", callback_data="date:01.01.2026")],
-                    [InlineKeyboardButton("01.02.2026", callback_data="date:01.02.2026")]
+                    [InlineKeyboardButton("01.01.2026", callback_data="date:01.01.2026"), InlineKeyboardButton("01.02.2026", callback_data="date:01.02.2026")],
+                    [InlineKeyboardButton("01.03.2026", callback_data="date:01.03.2026")]
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 
@@ -144,10 +155,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     elif data.startswith("date:"):
         date_val = data.split(":", 1)[1]
-        if date_val == "tomorrow":
-            message_to_send = "Morgen" 
-        else:
-            message_to_send = date_val
+        # Removed "tomorrow" logic as requested
+        message_to_send = date_val
             
     elif data.startswith("cmd:"):
         cmd = data.split(":", 1)[1]
@@ -176,6 +185,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "channel": "telegram"
         }
         
+        ui_data = None
         try:
             response = requests.post(BACKEND_URL, json=payload)
             response.raise_for_status()
@@ -196,10 +206,20 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     for p in products:
                         p_name = p.get("name", "Produkt")
                         p_id = p.get("id")
-                        keyboard.append([InlineKeyboardButton(f"⚡ {p_name} ({p.get('workingPrice')} ct/kWh)", callback_data=f"prod:{p_id}")])
+                        is_green = p.get("isGreen", False)
+                        icon = "🌱" if is_green else "⚡"
+                        
+                        try:
+                            price = float(p.get('workingPrice', 0))
+                            price_str = f"{price:.2f}".replace('.', ',')
+                        except:
+                            price_str = str(p.get('workingPrice'))
+                            
+                        keyboard.append([InlineKeyboardButton(f"{icon} {p_name} ({price_str} ct/kWh)", callback_data=f"prod:{p_id}")])
                     reply_markup = InlineKeyboardMarkup(keyboard)
                 
                 elif ui_type == "consumption_input":
+                    reply_text += "\n\n💡 *Tipp:* Du kannst auch einfach eine Zahl eintippen (z.B. 3200)."
                     keyboard = [
                         [InlineKeyboardButton("1500 kWh", callback_data="cons:1500"), InlineKeyboardButton("2500 kWh", callback_data="cons:2500")],
                         [InlineKeyboardButton("3500 kWh", callback_data="cons:3500"), InlineKeyboardButton("5000 kWh", callback_data="cons:5000")]
@@ -207,9 +227,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     
                 elif ui_type == "date_input":
+                    reply_text += "\n\n📅 *Wann soll der Vertrag starten?*"
                     keyboard = [
-                        [InlineKeyboardButton("Morgen", callback_data="date:tomorrow"), InlineKeyboardButton("01.01.2026", callback_data="date:01.01.2026")],
-                        [InlineKeyboardButton("01.02.2026", callback_data="date:01.02.2026")]
+                        [InlineKeyboardButton("01.01.2026", callback_data="date:01.01.2026"), InlineKeyboardButton("01.02.2026", callback_data="date:01.02.2026")],
+                        [InlineKeyboardButton("01.03.2026", callback_data="date:01.03.2026")]
                     ]
                     reply_markup = InlineKeyboardMarkup(keyboard)
                     
@@ -263,7 +284,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     keyboard = []
                     for p in products:
                         p_name = p.get("name", "Produkt")
-                        keyboard.append([InlineKeyboardButton(f"⚡ {p_name} ({p.get('workingPrice')} ct/kWh)", callback_data=f"prod:{p_name[:40]}")])
+                        try:
+                            price = float(p.get('workingPrice', 0))
+                            price_str = f"{price:.2f}".replace('.', ',')
+                        except:
+                            price_str = str(p.get('workingPrice'))
+                        keyboard.append([InlineKeyboardButton(f"⚡ {p_name} ({price_str} ct/kWh)", callback_data=f"prod:{p_name[:40]}")])
                     reply_markup = InlineKeyboardMarkup(keyboard)
                 elif ui_type == "consumption_input":
                     keyboard = [
@@ -273,8 +299,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup = InlineKeyboardMarkup(keyboard)
                 elif ui_type == "date_input":
                     keyboard = [
-                        [InlineKeyboardButton("Morgen", callback_data="date:tomorrow"), InlineKeyboardButton("01.01.2026", callback_data="date:01.01.2026")],
-                        [InlineKeyboardButton("01.02.2026", callback_data="date:01.02.2026")]
+                        [InlineKeyboardButton("01.01.2026", callback_data="date:01.01.2026"), InlineKeyboardButton("01.02.2026", callback_data="date:01.02.2026")],
+                        [InlineKeyboardButton("01.03.2026", callback_data="date:01.03.2026")]
                     ]
                     reply_markup = InlineKeyboardMarkup(keyboard)
                 elif ui_type == "simulation_result":
