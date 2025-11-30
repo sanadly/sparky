@@ -37,58 +37,66 @@ CBI/
 └── run_all.sh            # Alle Tests ausführen
 ```
 
-## 🚀 Schnellstart
+## 🚀 Installation & Start
 
-### 1. Dependencies installieren
+### 1. Backend (Python)
+
+**Voraussetzungen:** Python 3.10+
 
 ```bash
+# 1. Dependencies installieren
 pip install -r requirements.txt
+
+# 2. Backend starten
+uvicorn backend.main:app --reload --port 8000
 ```
 
-### 2. Backend & Web Portal starten
+Das Backend läuft nun unter: `http://localhost:8000`
+
+### 2. Frontend (Web Portal)
+
+**Voraussetzungen:** Node.js 18+
 
 ```bash
-./start_backend.sh
+cd web-portal
+
+# 1. Dependencies installieren
+npm install
+
+# 2. Frontend starten
+npm run dev
 ```
 
-Dann öffnen: **http://localhost:8000**
+Das Web-Portal ist erreichbar unter: `http://localhost:5173` (oder Port im Terminal prüfen)
 
-### 3. Telegram Bot starten (in neuem Terminal)
+### 3. Telegram Bot
 
 ```bash
-./start_telegram.sh
+# In neuem Terminal (im Hauptverzeichnis)
+python -m backend.telegram_bot
 ```
 
-Dann chatten mit: **@SparkyBerater_bot**
+## 🔑 Konfiguration (.env)
 
-## 🧪 Tests ausführen
+Erstelle eine Datei `.env` im Hauptverzeichnis und fülle sie mit deinen Daten. Siehe `.env.example` für eine Vorlage.
 
-```bash
-./run_all.sh
-```
+| Variable | Beschreibung |
+|----------|--------------|
+| `SAP_CLIENT_ID` | Client ID für SAP OAuth |
+| `SAP_CLIENT_SECRET` | Client Secret für SAP OAuth |
+| `GEMINI_API_KEY` | API Key für Google Gemini (AI) |
+| `TELEGRAM_BOT_TOKEN` | Token vom BotFather |
+| `SAP_OFFER_GROUP` | Gruppe für Angebote (z.B. "Simulation Gruppe1") |
+| `MOCK_SAP` | `True` um SAP zu simulieren (keine API Calls) |
+| `MOCK_LLM` | `True` um AI zu simulieren (keine API Calls) |
 
-Dies führt zwei Tests aus:
-- **Setup Test**: Verifiziert SAP Client, LLM Service, Backend
-- **Flow Test**: Simuliert kompletten Gesprächsablauf
+**Hinweis:** Wenn `SAP_CLIENT_ID` oder `GEMINI_API_KEY` fehlen, schaltet das System automatisch in den Mock-Modus.
 
-## 🔑 Konfiguration
+## 🛠️ Troubleshooting
 
-Die Datei `.env` enthält alle Credentials:
-
-```env
-# SAP Credentials (von INTENSE AG bereitgestellt)
-SAP_CLIENT_ID=your_client_id
-SAP_CLIENT_SECRET=your_client_secret
-
-# Google Gemini API (Optional, für echte KI-Antworten)
-# Hol dir deinen Key hier: https://aistudio.google.com/app/apikey
-GEMINI_API_KEY=your_gemini_api_key
-
-# Telegram (bereits konfiguriert)
-TELEGRAM_BOT_TOKEN=8251533467:AAGAgMHqoPuHbDGZLi3ZRY_qZHfMF7fWWPQ
-```
-
-**Wichtig**: Bis die echten SAP-Credentials eingetragen sind, verwendet das System Mock-Daten.
+- **Gemini 403 Error**: Dein API Key ist ungültig oder geleakt. Erstelle einen neuen Key in AI Studio.
+- **SAP 500 Error**: Prüfe die Logs (`backend.log`). Oft liegt es an ungültigen Produktdaten oder fehlenden Berechtigungen.
+- **Telegram ConnectError**: Prüfe deine Internetverbindung oder DNS-Einstellungen.
 
 ## 💬 Gesprächsablauf ("Happy Path")
 

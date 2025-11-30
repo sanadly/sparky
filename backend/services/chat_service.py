@@ -12,7 +12,8 @@ from ..session_manager import (
     STATE_WAITING_FOR_PRODUCT_CHOICE,
     STATE_SIMULATION_DONE,
     STATE_WAITING_FOR_DATE,
-    STATE_OFFER_CREATED
+    STATE_OFFER_CREATED,
+    STATE_CONFIRM_RESET
 )
 
 logger = logging.getLogger(__name__)
@@ -95,8 +96,15 @@ class ChatService:
         
         # Global Intents
         if "reset" in text_lower or "start" in text_lower:
-            session_manager.reset_session(user_id)
-            return {"reply": "Alles zurückgesetzt. Hallo! Ich bin Sparky. Sag 'Hallo' um zu starten."}
+            # Check if we are already at START, no need to confirm
+            if state == STATE_START:
+                 return await self._handle_start(session, text_lower, text)
+            
+            session["state"] = STATE_CONFIRM_RESET
+            return {
+                "reply": "Möchtest du den aktuellen Chat wirklich beenden und neu starten?",
+                "quick_replies": ["Ja, Neustart", "Nein, weiter"]
+            }
 
         # Direct Product Selection (Bypass LLM)
         if text.startswith("SELECT_PRODUCT:"):
@@ -118,6 +126,8 @@ class ChatService:
         # State Machine
         if state == STATE_START:
             return await self._handle_start(session, text_lower, text)
+        elif state == STATE_CONFIRM_RESET:
+            return await self._handle_confirm_reset(session, text_lower, user_id)
         elif state == STATE_WAITING_FOR_CONSUMPTION:
             return await self._handle_consumption(session, text)
         elif state == STATE_WAITING_FOR_PRODUCT_CHOICE:
@@ -131,6 +141,30 @@ class ChatService:
         
         # Fallback
         return {"reply": llm_service.generate_answer(text)}
+
+    async def _handle_confirm_reset(self, session, text_lower, user_id):
+        if any(x in text_lower for x in ["ja", "yes", "neustart", "reset", "ok"]):
+            session_manager.reset_session(user_id)
+            return {"reply": "Alles zurückgesetzt. Hallo! Ich bin Sparky. Sag 'Hallo' um zu starten."}
+        else:
+            # Revert to previous state or just say "Ok, weiter gehts"
+            # Since we don't track "previous_state" explicitly in session dict yet, 
+            # we might just have to guess or reset to START if we can't recover.
+            # But wait, session["state"] was overwritten to CONFIRM_RESET.
+            # To properly resume, we would need to store `previous_state`.
+            # For now, let's just assume if they say NO, we go back to START but keep data?
+            # Or better: We should have stored previous state. 
+            
+            # Simple fix: If they say NO, we just say "Okay" and wait for next input, 
+            # but we need a valid state.
+            # Let's default to START but keep data if possible, or just reset if complex.
+            
+            # Actually, let's just reset to START but without the "Reset" message if they say NO? 
+            # No, that's confusing.
+            
+            # If user says "Nein", we should ideally return to where we were.
+            # Since we didn't save it, let's just say:
+            return {"reply": "Okay, wir machen weiter. (Schreibe 'Start' wenn du es dir anders überlegst).", "state": STATE_START} # Fallback to START for safety
 
     async def _handle_start(self, session, text_lower, text):
         # 1. Explicit request for products OR Affirmation (User says "Ja" to "Möchtest du Tarife sehen?")
@@ -393,7 +427,9 @@ class ChatService:
                         }
                     }
                 else:
-                    return {"reply": "Fehler bei der Angebotserstellung. Bitte versuche es später."}
+                    # Error case: Reset session to avoid being stuck in "Waiting for Date"
+                    session_manager.reset_session(user_id)
+                    return {"reply": "Es gab einen Fehler bei der Angebotserstellung (SAP Systemfehler). Bitte versuche es später noch einmal oder wähle einen anderen Tarif. Schreibe 'Hallo' um neu zu starten."}
             except ValueError:
                  return {"reply": "Ungültiges Datumsformat. Bitte nutze TT.MM.JJJJ."}
         

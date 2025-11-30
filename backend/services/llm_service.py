@@ -35,7 +35,8 @@ class LLMService:
         Generates an answer using Gemini LLM.
         """
         if not self.enabled:
-            return "Fehler: Gemini API Key fehlt. Bitte konfiguriere GEMINI_API_KEY in der .env Datei."
+            # Fallback for Mock Mode
+            return "Ich bin im Offline-Modus. Bitte nutze die Buttons oder schreibe 'Start', um neu zu beginnen."
 
         try:
             system_prompt = """

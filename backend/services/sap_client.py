@@ -34,7 +34,7 @@ class SAPClient:
         }
         
         try:
-            response = requests.post(settings.AUTH_URL, headers=headers, data=data)
+            response = requests.post(settings.AUTH_URL, headers=headers, data=data, timeout=30)
             response.raise_for_status()
             self.token = response.json().get("access_token")
             if not self.token:
@@ -61,7 +61,7 @@ class SAPClient:
         }
         
         try:
-            response = requests.get(settings.PRODUCT_URL, headers=headers)
+            response = requests.get(settings.PRODUCT_URL, headers=headers, timeout=30)
             response.raise_for_status()
             all_products = response.json()
             
@@ -107,7 +107,7 @@ class SAPClient:
         logger.info(f"🚀 SIMULATION PAYLOAD: {payload}")
         
         try:
-            response = requests.get(settings.SIMULATION_URL, headers=headers, json=payload)
+            response = requests.get(settings.SIMULATION_URL, headers=headers, json=payload, timeout=30)
             response.raise_for_status()
             sim_result = response.json()
             logger.info(f"💰 RAW SIMULATION RESPONSE (GET): {sim_result}")
@@ -115,13 +115,15 @@ class SAPClient:
         except Exception as e:
             logger.warning(f"GET Simulation failed: {e}. Trying POST...")
             try:
-                response = requests.post(settings.SIMULATION_URL, headers=headers, json=payload)
+                response = requests.post(settings.SIMULATION_URL, headers=headers, json=payload, timeout=30)
                 response.raise_for_status()
                 sim_result = response.json()
                 logger.info(f"💰 RAW SIMULATION RESPONSE (POST): {sim_result}")
                 return sim_result
             except Exception as e2:
                 logger.error(f"Error simulating price (POST): {e2}")
+                if hasattr(e2, 'response') and e2.response is not None:
+                     logger.error(f"SAP Error Response Body: {e2.response.text}")
                 return None
 
     def create_offer(self, token: str, product_id: str, start_date: str, consumption_r1: float, consumption_r2: str = "", user_details: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
@@ -140,21 +142,14 @@ class SAPClient:
             "Produkt": str(product_id)
         }
         
-        # Use user_id as PartnerID if available, otherwise a default or empty
-        partner_id = user_details.get("user_id", "") if user_details else ""
-
         payload = {
-            "STARTDATE": f"{start_date}T00:00:00",
-            "ConsumptionR1": str(consumption_r1),
-            "ConsumptionR2": str(consumption_r2),
-            "ProductID": str(product_id),
-            "PartnerID": str(partner_id)
+            "STARTDATE": f"{start_date}"
         }
         
         logger.info(f"🚀 CREATE OFFER PAYLOAD: {payload}")
         
         try:
-            response = requests.post(settings.OFFER_URL, headers=headers, json=payload)
+            response = requests.post(settings.OFFER_URL, headers=headers, json=payload, timeout=30)
             response.raise_for_status()
             return response.json()
         except Exception as e:
