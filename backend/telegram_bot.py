@@ -1,11 +1,11 @@
-
 import logging
-import requests
-import json
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, constants
+import httpx
+import asyncio
+from telegram import Update, constants
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 from .config import settings
 from .logger import setup_logging
+from .telegram_ui import TelegramUI
 
 # Configure Logging
 setup_logging()
@@ -17,9 +17,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Reset session on backend
     user_id = str(update.effective_user.id)
     try:
-        requests.post(BACKEND_URL, json={"user_id": user_id, "message": "reset", "channel": "telegram"})
-    except:
-        pass
+        async with httpx.AsyncClient() as client:
+            await client.post(BACKEND_URL, json={"user_id": user_id, "message": "reset", "channel": "telegram"})
+    except Exception as e:
+        logger.error(f"Failed to reset session: {e}")
         
     await update.message.reply_text(
         '👋 **Hallo!** Ich bin dein Vertriebs-Bot.\n\nIch helfe dir, den perfekten Stromtarif zu finden. ⚡\n\nSchreib mir einfach "Hallo" oder "Tarife", um zu starten.',
@@ -41,97 +42,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     
     try:
-        response = requests.post(BACKEND_URL, json=payload)
-        response.raise_for_status()
-        data = response.json()
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(BACKEND_URL, json=payload)
+            response.raise_for_status()
+            data = response.json()
         
-        reply_text = data.get("reply", "Keine Antwort vom Server.")
-        ui_data = data.get("ui_data", {})
-        quick_replies = data.get("quick_replies", []) # Support for quick replies (e.g. Reset Confirm)
+        await _process_backend_response(update, context, data)
         
-        # Prepare Keyboard based on ui_data OR quick_replies
-        reply_markup = None
-        
-        if ui_data:
-            ui_type = ui_data.get("type")
-            
-            if ui_type == "product_selection":
-                products = ui_data.get("products", [])
-                keyboard = []
-                for p in products:
-                    p_name = p.get("name", "Produkt")
-                    p_id = p.get("id")
-                    is_green = p.get("isGreen", False)
-                    icon = "🌱" if is_green else "⚡"
-                    
-                    try:
-                        price = float(p.get('workingPrice', 0))
-                        price_str = f"{price:.2f}".replace('.', ',')
-                    except:
-                        price_str = str(p.get('workingPrice'))
-                        
-                    keyboard.append([InlineKeyboardButton(f"{icon} {p_name} ({price_str} ct/kWh)", callback_data=f"prod:{p_id}")])
-                reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            elif ui_type == "consumption_input":
-                reply_text += "\n\n💡 *Tipp:* Du kannst auch einfach eine Zahl eintippen (z.B. 3200)."
-                keyboard = [
-                    [InlineKeyboardButton("1500 kWh", callback_data="cons:1500"), InlineKeyboardButton("2500 kWh", callback_data="cons:2500")],
-                    [InlineKeyboardButton("3500 kWh", callback_data="cons:3500"), InlineKeyboardButton("5000 kWh", callback_data="cons:5000")]
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-            elif ui_type == "date_input":
-                reply_text += "\n\n📅 *Wann soll der Vertrag starten?*"
-                keyboard = [
-                    [InlineKeyboardButton("01.01.2026", callback_data="date:01.01.2026"), InlineKeyboardButton("01.02.2026", callback_data="date:01.02.2026")],
-                    [InlineKeyboardButton("01.03.2026", callback_data="date:01.03.2026")]
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-            elif ui_type == "simulation_result":
-                keyboard = [
-                    [InlineKeyboardButton("✅ Angebot anfordern", callback_data="cmd:angebot")],
-                    [InlineKeyboardButton("🔄 Verbrauch ändern", callback_data="cmd:change_consumption")]
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            elif ui_type == "offer_success":
-                offer_id = ui_data.get("offer_id", "Unbekannt")
-                # Enhance reply text with monospaced ID for easy copying
-                reply_text += f"\n\n🆔 Offer ID: `{offer_id}`"
-                
-                keyboard = [[InlineKeyboardButton("🔄 Neuer Start", callback_data="cmd:restart")]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-
-        # Fallback: Check for Quick Replies (e.g. Reset Confirmation)
-        elif quick_replies:
-            keyboard = []
-            row = []
-            for qr in quick_replies:
-                # Map text to callback data
-                cb_data = "cmd:unknown"
-                if "ja" in qr.lower() or "neustart" in qr.lower():
-                    cb_data = "cmd:reset_confirm"
-                elif "nein" in qr.lower() or "weiter" in qr.lower():
-                    cb_data = "cmd:reset_cancel"
-                else:
-                    # Generic fallback for other quick replies
-                    cb_data = f"msg:{qr[:20]}" 
-                
-                row.append(InlineKeyboardButton(qr, callback_data=cb_data))
-                if len(row) == 2:
-                    keyboard.append(row)
-                    row = []
-            if row:
-                keyboard.append(row)
-            reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await update.message.reply_text(reply_text, parse_mode=constants.ParseMode.MARKDOWN, reply_markup=reply_markup)
-        
+    except httpx.RequestError as e:
+        logger.error(f"Backend Connection Error: {e}")
+        await update.message.reply_text(f"⚠️ Fehler bei der Verbindung zum Server. Bitte versuche es später noch einmal.", parse_mode=constants.ParseMode.MARKDOWN)
     except Exception as e:
-        logger.error(f"Backend Error: {e}")
-        await update.message.reply_text(f"⚠️ Fehler bei der Verbindung zum Backend.", parse_mode=constants.ParseMode.MARKDOWN)
+        logger.error(f"Unexpected Error: {e}")
+        await update.message.reply_text(f"⚠️ Ein unerwarteter Fehler ist aufgetreten.", parse_mode=constants.ParseMode.MARKDOWN)
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -146,7 +69,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if data.startswith("prod:"):
         product_id = data.split(":", 1)[1]
-        # Send a special command that the backend understands directly
         message_to_send = f"SELECT_PRODUCT:{product_id}"
     
     elif data.startswith("cons:"):
@@ -155,7 +77,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     elif data.startswith("date:"):
         date_val = data.split(":", 1)[1]
-        # Removed "tomorrow" logic as requested
         message_to_send = date_val
             
     elif data.startswith("cmd:"):
@@ -170,6 +91,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message_to_send = "Ja, Neustart"
         elif cmd == "reset_cancel":
             message_to_send = "Nein, weiter"
+        elif cmd == "show_products":
+            message_to_send = "Tarife anzeigen"
+        elif cmd == "start_simulation":
+            message_to_send = "Simulation starten"
             
     elif data.startswith("msg:"):
         message_to_send = data.split(":", 1)[1]
@@ -178,147 +103,65 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Send "Typing..." action
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=constants.ChatAction.TYPING)
         
-        # Send simulated user message to backend
         payload = {
             "user_id": user_id,
             "message": message_to_send,
             "channel": "telegram"
         }
         
-        ui_data = None
         try:
-            response = requests.post(BACKEND_URL, json=payload)
-            response.raise_for_status()
-            data = response.json()
-            reply_text = data.get("reply", "")
-            ui_data = data.get("ui_data", {})
-            quick_replies = data.get("quick_replies", [])
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(BACKEND_URL, json=payload)
+                response.raise_for_status()
+                data = response.json()
             
-            # Prepare Keyboard based on ui_data
-            reply_markup = None
-            
-            if ui_data:
-                ui_type = ui_data.get("type")
-                
-                if ui_type == "product_selection":
-                    products = ui_data.get("products", [])
-                    keyboard = []
-                    for p in products:
-                        p_name = p.get("name", "Produkt")
-                        p_id = p.get("id")
-                        is_green = p.get("isGreen", False)
-                        icon = "🌱" if is_green else "⚡"
-                        
-                        try:
-                            price = float(p.get('workingPrice', 0))
-                            price_str = f"{price:.2f}".replace('.', ',')
-                        except:
-                            price_str = str(p.get('workingPrice'))
-                            
-                        keyboard.append([InlineKeyboardButton(f"{icon} {p_name} ({price_str} ct/kWh)", callback_data=f"prod:{p_id}")])
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                elif ui_type == "consumption_input":
-                    reply_text += "\n\n💡 *Tipp:* Du kannst auch einfach eine Zahl eintippen (z.B. 3200)."
-                    keyboard = [
-                        [InlineKeyboardButton("1500 kWh", callback_data="cons:1500"), InlineKeyboardButton("2500 kWh", callback_data="cons:2500")],
-                        [InlineKeyboardButton("3500 kWh", callback_data="cons:3500"), InlineKeyboardButton("5000 kWh", callback_data="cons:5000")]
-                    ]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                    
-                elif ui_type == "date_input":
-                    reply_text += "\n\n📅 *Wann soll der Vertrag starten?*"
-                    keyboard = [
-                        [InlineKeyboardButton("01.01.2026", callback_data="date:01.01.2026"), InlineKeyboardButton("01.02.2026", callback_data="date:01.02.2026")],
-                        [InlineKeyboardButton("01.03.2026", callback_data="date:01.03.2026")]
-                    ]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                    
-                elif ui_type == "simulation_result":
-                    keyboard = [
-                        [InlineKeyboardButton("✅ Angebot anfordern", callback_data="cmd:angebot")],
-                        [InlineKeyboardButton("🔄 Verbrauch ändern", callback_data="cmd:change_consumption")]
-                    ]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                elif ui_type == "offer_success":
-                    offer_id = ui_data.get("offer_id", "Unbekannt")
-                    reply_text += f"\n\n🆔 Offer ID: `{offer_id}`"
-                    keyboard = [[InlineKeyboardButton("🔄 Neuer Start", callback_data="cmd:restart")]]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
+            # Remove buttons from old message to prevent double-clicking
+            try:
+                await query.edit_message_reply_markup(reply_markup=None)
+            except Exception:
+                pass # Message might be too old or already modified
 
-            # Fallback: Check for Quick Replies (e.g. Reset Confirmation)
-            elif quick_replies:
-                keyboard = []
-                row = []
-                for qr in quick_replies:
-                    cb_data = "cmd:unknown"
-                    if "ja" in qr.lower() or "neustart" in qr.lower():
-                        cb_data = "cmd:reset_confirm"
-                    elif "nein" in qr.lower() or "weiter" in qr.lower():
-                        cb_data = "cmd:reset_cancel"
-                    else:
-                        cb_data = f"msg:{qr[:20]}"
-                    
-                    row.append(InlineKeyboardButton(qr, callback_data=cb_data))
-                    if len(row) == 2:
-                        keyboard.append(row)
-                        row = []
-                if row:
-                    keyboard.append(row)
-                reply_markup = InlineKeyboardMarkup(keyboard)
-
-            await query.edit_message_reply_markup(reply_markup=None) # Remove buttons from old message
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=reply_text, parse_mode=constants.ParseMode.MARKDOWN, reply_markup=reply_markup)
-            
-        except Exception as e:
-            logger.error(f"Backend Error in callback: {e}")
-            await query.message.reply_text(f"⚠️ Fehler bei der Verbindung zum Backend.", parse_mode=constants.ParseMode.MARKDOWN)
-            
-            # Handle UI data for callback responses too (Recursion logic duplicated for simplicity)
-            reply_markup = None
-            if ui_data:
-                ui_type = ui_data.get("type")
-                if ui_type == "product_selection":
-                    products = ui_data.get("products", [])
-                    keyboard = []
-                    for p in products:
-                        p_name = p.get("name", "Produkt")
-                        try:
-                            price = float(p.get('workingPrice', 0))
-                            price_str = f"{price:.2f}".replace('.', ',')
-                        except:
-                            price_str = str(p.get('workingPrice'))
-                        keyboard.append([InlineKeyboardButton(f"⚡ {p_name} ({price_str} ct/kWh)", callback_data=f"prod:{p_name[:40]}")])
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                elif ui_type == "consumption_input":
-                    keyboard = [
-                        [InlineKeyboardButton("1500 kWh", callback_data="cons:1500"), InlineKeyboardButton("2500 kWh", callback_data="cons:2500")],
-                        [InlineKeyboardButton("3500 kWh", callback_data="cons:3500"), InlineKeyboardButton("5000 kWh", callback_data="cons:5000")]
-                    ]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                elif ui_type == "date_input":
-                    keyboard = [
-                        [InlineKeyboardButton("01.01.2026", callback_data="date:01.01.2026"), InlineKeyboardButton("01.02.2026", callback_data="date:01.02.2026")],
-                        [InlineKeyboardButton("01.03.2026", callback_data="date:01.03.2026")]
-                    ]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                elif ui_type == "simulation_result":
-                    keyboard = [
-                        [InlineKeyboardButton("✅ Angebot anfordern", callback_data="cmd:angebot")],
-                        [InlineKeyboardButton("🔄 Verbrauch ändern", callback_data="cmd:change_consumption")]
-                    ]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                elif ui_type == "offer_success":
-                    keyboard = [[InlineKeyboardButton("Neuer Start", callback_data="cmd:restart")]]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-
-            await query.edit_message_reply_markup(reply_markup=None) # Remove buttons from old message
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=reply_text, parse_mode=constants.ParseMode.MARKDOWN, reply_markup=reply_markup)
+            await _process_backend_response(update, context, data)
             
         except Exception as e:
             logger.error(f"Backend Error in Callback: {e}")
-            await context.bot.send_message(chat_id=update.effective_chat.id, text="Fehler beim Verarbeiten der Auswahl.")
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="⚠️ Fehler beim Verarbeiten der Auswahl.")
+
+async def _process_backend_response(update: Update, context: ContextTypes.DEFAULT_TYPE, data: dict):
+    reply_text = data.get("reply", "Keine Antwort vom Server.")
+    ui_data = data.get("ui_data", {})
+    quick_replies = data.get("quick_replies", [])
+    
+    reply_markup = None
+    
+    if ui_data:
+        ui_type = ui_data.get("type")
+        
+        if ui_type == "product_selection":
+            products = ui_data.get("products", [])
+            reply_markup = TelegramUI.create_product_selection_keyboard(products)
+        
+        elif ui_type == "consumption_input":
+            reply_text += "\n\n💡 *Tipp:* Du kannst auch einfach eine Zahl eintippen (z.B. 3200)."
+            reply_markup = TelegramUI.create_consumption_input_keyboard()
+            
+        elif ui_type == "date_input":
+            reply_text += "\n\n📅 *Wann soll der Vertrag starten?*"
+            reply_markup = TelegramUI.create_date_input_keyboard()
+            
+        elif ui_type == "simulation_result":
+            reply_markup = TelegramUI.create_simulation_result_keyboard()
+        
+        elif ui_type == "offer_success":
+            offer_id = ui_data.get("offer_id", "Unbekannt")
+            reply_text += f"\n\n🆔 Offer ID: `{offer_id}`"
+            reply_markup = TelegramUI.create_offer_success_keyboard()
+
+    elif quick_replies:
+        reply_markup = TelegramUI.create_quick_replies_keyboard(quick_replies)
+
+    chat_id = update.effective_chat.id
+    await context.bot.send_message(chat_id=chat_id, text=reply_text, parse_mode=constants.ParseMode.MARKDOWN, reply_markup=reply_markup)
 
 if __name__ == '__main__':
     if not settings.TELEGRAM_BOT_TOKEN or settings.TELEGRAM_BOT_TOKEN == "your_telegram_bot_token":
