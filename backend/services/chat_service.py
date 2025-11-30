@@ -439,10 +439,7 @@ class ChatService:
                     
         return consumption_r1, consumption_r2
 
-    async def _handle_message(self, user_id, text):
-        # ... (rest of the method)
 
-    # ... (rest of the methods)
 
     async def _run_simulation(self, session):
         data = session["data"]
