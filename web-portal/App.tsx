@@ -6,6 +6,7 @@ import { generateChatResponse } from './services/geminiService';
 import ConsumptionVisualizer from './components/ConsumptionVisualizer';
 import ProductCarousel from './components/ProductCarousel';
 import BillPredictor from './components/BillPredictor';
+import DateSelector from './components/DateSelector';
 import './index.css';
 
 const App = () => {
@@ -48,7 +49,8 @@ const App = () => {
               setTimeout(() => {
                   addMessage({
                       type: MessageType.INPUT_CONSUMPTION,
-                      sender: 'bot'
+                      sender: 'bot',
+                      data: { is_dt: ui.is_dt }
                   });
               }, 500);
           } else if (ui.type === 'product_selection') {
@@ -68,8 +70,22 @@ const App = () => {
                       data: ui.data
                   });
               }, 500);
+          } else if (ui.type === 'date_input') {
+              setTimeout(() => {
+                  addMessage({
+                      type: MessageType.INPUT_DATE,
+                      sender: 'bot',
+                      data: {}
+                  });
+              }, 500);
           } else if (ui.type === 'offer_success') {
-               // Handle offer success widget if exists, or just text
+               setTimeout(() => {
+                   addMessage({
+                       type: MessageType.OFFER_SUCCESS,
+                       sender: 'bot',
+                       data: ui
+                   });
+               }, 500);
           }
       }
   };
@@ -99,19 +115,24 @@ const App = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  const handleConsumptionConfirm = async (householdSize: number, consumption: number) => {
+  const handleConsumptionConfirm = async (consumption: number, householdSize: number, split?: { r1: number, r2: number }) => {
     setUserState({ ...userState, householdSize, consumption });
+
+    let text = `${consumption} kWh`;
+    if (split) {
+        text = `${split.r1} HT ${split.r2} NT`;
+    }
 
     addMessage({
         type: MessageType.TEXT,
         sender: 'user',
-        text: `${consumption} kWh`
+        text: text
     });
 
     setIsTyping(true);
     try {
         // Send the consumption to the backend
-        const response = await generateChatResponse(messages, { ...userState, consumption }, `Mein Verbrauch ist ${consumption} kWh`);
+        const response = await generateChatResponse(messages, { ...userState, consumption }, `Mein Verbrauch ist ${text}`);
         processBackendResponse(response);
     } catch (error) {
         console.error(error);
@@ -158,6 +179,24 @@ const App = () => {
       }
   };
 
+  const handleDateSelect = async (date: string) => {
+      addMessage({
+          type: MessageType.TEXT,
+          sender: 'user',
+          text: date
+      });
+
+      setIsTyping(true);
+      try {
+          const response = await generateChatResponse(messages, userState, date);
+          processBackendResponse(response);
+      } catch (error) {
+          console.error(error);
+      } finally {
+          setIsTyping(false);
+      }
+  };
+
   const handleSendMessage = async (e?: React.FormEvent, customText?: string) => {
       if (e) e.preventDefault();
       const text = customText || inputValue;
@@ -180,6 +219,32 @@ const App = () => {
           console.error(error);
       } finally {
           setIsTyping(false);
+      }
+  };
+
+  const handleRestart = async () => {
+      setMessages([]);
+      setUserState({
+        householdSize: null,
+        consumption: null,
+        selectedProductId: null,
+        simulation: null
+      });
+      
+      setIsAppLoading(true);
+      try {
+          // Send a hidden "start" message to trigger the backend welcome flow
+          const response = await generateChatResponse([], {
+            householdSize: null,
+            consumption: null,
+            selectedProductId: null,
+            simulation: null
+          }, "start");
+          processBackendResponse(response);
+      } catch (e) {
+          console.error("Failed to restart chat", e);
+      } finally {
+          setIsAppLoading(false);
       }
   };
 
@@ -213,7 +278,12 @@ const App = () => {
           </div>
         );
       case MessageType.INPUT_CONSUMPTION:
-        return <ConsumptionVisualizer onConfirm={handleConsumptionConfirm} />;
+        return (
+            <ConsumptionVisualizer 
+                onConfirm={handleConsumptionConfirm} 
+                isDoubleTariff={msg.data?.is_dt}
+            />
+        );
       case MessageType.PRODUCT_SELECTION:
         return <ProductCarousel userConsumption={userState.consumption || 2500} onSelectProduct={handleProductSelect} products={msg.data?.products} />;
       case MessageType.SIMULATION_RESULT:
@@ -223,6 +293,32 @@ const App = () => {
                 consumption={msg.data.consumption} 
                 onSecure={handleSecureOffer} 
             />
+        );
+      case MessageType.INPUT_DATE:
+        return <DateSelector onSelect={handleDateSelect} />;
+      case MessageType.OFFER_SUCCESS:
+        return (
+            <div className="bg-white/10 p-6 rounded-2xl border border-white/10 backdrop-blur-md animate-slide-up">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center">
+                        <Zap className="text-green-400" size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-white font-bold text-lg">Angebot erstellt!</h3>
+                        <p className="text-gray-400 text-sm">Vielen Dank für dein Vertrauen.</p>
+                    </div>
+                </div>
+                <div className="bg-white/5 rounded-xl p-4 mb-4">
+                    <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Angebotsnummer</div>
+                    <div className="text-2xl font-mono text-energy-teal">{msg.data.offer_id}</div>
+                </div>
+                <button 
+                    onClick={handleRestart}
+                    className="w-full py-3 bg-energy-teal text-energy-900 font-bold rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all"
+                >
+                    Neuen Vertrag simulieren
+                </button>
+            </div>
         );
       default:
         return null;

@@ -3,26 +3,49 @@ import { INITIAL_CONSUMPTION } from '../constants';
 import { Home, User, Users, Tv, WashingMachine, Zap, Car } from 'lucide-react';
 
 interface Props {
-  onConfirm: (consumption: number, householdSize: number) => void;
+  onConfirm: (consumption: number, householdSize: number, split?: { r1: number, r2: number }) => void;
+  isDoubleTariff?: boolean;
 }
 
-const ConsumptionVisualizer: React.FC<Props> = ({ onConfirm }) => {
+const ConsumptionVisualizer: React.FC<Props> = ({ onConfirm, isDoubleTariff = false }) => {
   const [consumption, setConsumption] = useState(INITIAL_CONSUMPTION);
+  const [consumptionHT, setConsumptionHT] = useState(Math.round(INITIAL_CONSUMPTION * 0.7));
+  const [consumptionNT, setConsumptionNT] = useState(Math.round(INITIAL_CONSUMPTION * 0.3));
+  
   const [householdSize, setHouseholdSize] = useState(2);
   const [intensity, setIntensity] = useState(0.5);
 
   useEffect(() => {
+    let total = consumption;
+    if (isDoubleTariff) {
+        total = consumptionHT + consumptionNT;
+    }
     // Map consumption 1000-6000 to opacity/intensity 0-1
-    const val = Math.min(Math.max((consumption - 1000) / 5000, 0), 1);
+    const val = Math.min(Math.max((total - 1000) / 5000, 0), 1);
     setIntensity(val);
-  }, [consumption]);
+  }, [consumption, consumptionHT, consumptionNT, isDoubleTariff]);
 
   const handlePreset = (size: number, kwh: number) => {
     setHouseholdSize(size);
-    setConsumption(kwh);
+    if (isDoubleTariff) {
+        setConsumptionHT(Math.round(kwh * 0.7));
+        setConsumptionNT(Math.round(kwh * 0.3));
+    } else {
+        setConsumption(kwh);
+    }
+  };
+
+  const handleConfirm = () => {
+      if (isDoubleTariff) {
+          onConfirm(consumptionHT + consumptionNT, householdSize, { r1: consumptionHT, r2: consumptionNT });
+      } else {
+          onConfirm(consumption, householdSize);
+      }
   };
 
   // Appliance indicators based on consumption
+  const currentConsumption = isDoubleTariff ? consumptionHT + consumptionNT : consumption;
+  
   const appliances = [
     { icon: Tv, label: 'Basis', threshold: 0 },
     { icon: WashingMachine, label: 'Komfort', threshold: 2000 },
@@ -32,7 +55,9 @@ const ConsumptionVisualizer: React.FC<Props> = ({ onConfirm }) => {
 
   return (
     <div className="w-full max-w-sm mx-auto bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl p-6 shadow-2xl animate-slide-up select-none">
-      <h3 className="text-xl font-bold text-energy-teal mb-4 text-center">Zuhause-Visualisierer</h3>
+      <h3 className="text-xl font-bold text-energy-teal mb-4 text-center">
+          {isDoubleTariff ? 'Doppeltarif-Visualisierer' : 'Zuhause-Visualisierer'}
+      </h3>
       
       {/* Interactive House Graphic */}
       <div className="relative h-48 w-full mb-6 flex justify-center items-center bg-gradient-to-b from-transparent to-black/20 rounded-xl overflow-hidden border border-white/5">
@@ -73,7 +98,7 @@ const ConsumptionVisualizer: React.FC<Props> = ({ onConfirm }) => {
           {appliances.map((Appliance, idx) => (
             <div 
               key={idx}
-              className={`p-1.5 rounded-full transition-all duration-500 border border-white/5 ${consumption >= Appliance.threshold ? 'bg-energy-teal text-energy-900 scale-110 shadow-[0_0_10px_rgba(100,255,218,0.5)]' : 'bg-black/40 text-gray-600 scale-90 grayscale'}`}
+              className={`p-1.5 rounded-full transition-all duration-500 border border-white/5 ${currentConsumption >= Appliance.threshold ? 'bg-energy-teal text-energy-900 scale-110 shadow-[0_0_10px_rgba(100,255,218,0.5)]' : 'bg-black/40 text-gray-600 scale-90 grayscale'}`}
               title={Appliance.label}
             >
               <Appliance.icon size={14} />
@@ -107,48 +132,118 @@ const ConsumptionVisualizer: React.FC<Props> = ({ onConfirm }) => {
         </button>
       </div>
 
-      {/* Slider */}
-      <div className="mb-8 px-1">
-        <div className="flex justify-between items-baseline mb-3">
-          <span className="text-gray-400 text-xs">Jahresverbrauch</span>
-          <div className="flex items-baseline gap-1">
-            <span className="text-3xl font-bold text-white font-mono tracking-tight">{consumption}</span>
-            <span className="text-sm text-energy-teal">kWh</span>
-          </div>
-        </div>
-        
-        <div className="relative h-8 flex items-center">
-            <input 
-              type="range" 
-              min="1000" 
-              max="6000" 
-              step="100" 
-              value={consumption} 
-              onChange={(e) => setConsumption(parseInt(e.target.value))}
-              className="absolute w-full h-8 opacity-0 cursor-pointer z-20"
-            />
-            <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden relative z-10 box-border border border-white/5">
-                <div 
-                    className="h-full bg-gradient-to-r from-blue-500 via-teal-400 to-energy-teal transition-all duration-150"
-                    style={{ width: `${((consumption - 1000) / 5000) * 100}%` }}
+      {/* Sliders */}
+      {isDoubleTariff ? (
+          <>
+            {/* HT Slider */}
+            <div className="mb-4 px-1">
+                <div className="flex justify-between items-baseline mb-2">
+                <span className="text-gray-400 text-xs">Tagstrom (HT)</span>
+                <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-bold text-white font-mono tracking-tight">{consumptionHT}</span>
+                    <span className="text-xs text-energy-teal">kWh</span>
+                </div>
+                </div>
+                
+                <div className="relative h-6 flex items-center">
+                    <input 
+                    type="range" 
+                    min="500" 
+                    max="4000" 
+                    step="100" 
+                    value={consumptionHT} 
+                    onChange={(e) => setConsumptionHT(parseInt(e.target.value))}
+                    className="absolute w-full h-6 opacity-0 cursor-pointer z-20"
+                    />
+                    <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden relative z-10 box-border border border-white/5">
+                        <div 
+                            className="h-full bg-gradient-to-r from-yellow-500 to-orange-500 transition-all duration-150"
+                            style={{ width: `${((consumptionHT - 500) / 3500) * 100}%` }}
+                        />
+                    </div>
+                    <div 
+                        className="absolute h-5 w-5 bg-orange-500 rounded-full shadow-[0_0_10px_rgba(249,115,22,0.6)] border-2 border-energy-800 z-10 pointer-events-none transition-all duration-150 flex items-center justify-center"
+                        style={{ left: `calc(${((consumptionHT - 500) / 3500) * 100}% - 10px)` }}
+                    />
+                </div>
+            </div>
+
+            {/* NT Slider */}
+            <div className="mb-8 px-1">
+                <div className="flex justify-between items-baseline mb-2">
+                <span className="text-gray-400 text-xs">Nachtstrom (NT)</span>
+                <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-bold text-white font-mono tracking-tight">{consumptionNT}</span>
+                    <span className="text-xs text-energy-teal">kWh</span>
+                </div>
+                </div>
+                
+                <div className="relative h-6 flex items-center">
+                    <input 
+                    type="range" 
+                    min="200" 
+                    max="3000" 
+                    step="100" 
+                    value={consumptionNT} 
+                    onChange={(e) => setConsumptionNT(parseInt(e.target.value))}
+                    className="absolute w-full h-6 opacity-0 cursor-pointer z-20"
+                    />
+                    <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden relative z-10 box-border border border-white/5">
+                        <div 
+                            className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-150"
+                            style={{ width: `${((consumptionNT - 200) / 2800) * 100}%` }}
+                        />
+                    </div>
+                    <div 
+                        className="absolute h-5 w-5 bg-indigo-500 rounded-full shadow-[0_0_10px_rgba(99,102,241,0.6)] border-2 border-energy-800 z-10 pointer-events-none transition-all duration-150 flex items-center justify-center"
+                        style={{ left: `calc(${((consumptionNT - 200) / 2800) * 100}% - 10px)` }}
+                    />
+                </div>
+            </div>
+          </>
+      ) : (
+        <div className="mb-8 px-1">
+            <div className="flex justify-between items-baseline mb-3">
+            <span className="text-gray-400 text-xs">Jahresverbrauch</span>
+            <div className="flex items-baseline gap-1">
+                <span className="text-3xl font-bold text-white font-mono tracking-tight">{consumption}</span>
+                <span className="text-sm text-energy-teal">kWh</span>
+            </div>
+            </div>
+            
+            <div className="relative h-8 flex items-center">
+                <input 
+                type="range" 
+                min="1000" 
+                max="6000" 
+                step="100" 
+                value={consumption} 
+                onChange={(e) => setConsumption(parseInt(e.target.value))}
+                className="absolute w-full h-8 opacity-0 cursor-pointer z-20"
                 />
+                <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden relative z-10 box-border border border-white/5">
+                    <div 
+                        className="h-full bg-gradient-to-r from-blue-500 via-teal-400 to-energy-teal transition-all duration-150"
+                        style={{ width: `${((consumption - 1000) / 5000) * 100}%` }}
+                    />
+                </div>
+                {/* Custom Thumb (Visual only) */}
+                <div 
+                    className="absolute h-6 w-6 bg-energy-teal rounded-full shadow-[0_0_15px_rgba(100,255,218,0.6)] border-4 border-energy-800 z-10 pointer-events-none transition-all duration-150 flex items-center justify-center"
+                    style={{ left: `calc(${((consumption - 1000) / 5000) * 100}% - 12px)` }}
+                >
+                    <div className="w-1.5 h-1.5 bg-energy-900 rounded-full" />
+                </div>
             </div>
-            {/* Custom Thumb (Visual only) */}
-            <div 
-                className="absolute h-6 w-6 bg-energy-teal rounded-full shadow-[0_0_15px_rgba(100,255,218,0.6)] border-4 border-energy-800 z-10 pointer-events-none transition-all duration-150 flex items-center justify-center"
-                style={{ left: `calc(${((consumption - 1000) / 5000) * 100}% - 12px)` }}
-            >
-                <div className="w-1.5 h-1.5 bg-energy-900 rounded-full" />
+            <div className="flex justify-between text-[10px] text-gray-500 mt-1 font-mono">
+            <span>1000 kWh</span>
+            <span>6000 kWh</span>
             </div>
         </div>
-        <div className="flex justify-between text-[10px] text-gray-500 mt-1 font-mono">
-          <span>1000 kWh</span>
-          <span>6000 kWh</span>
-        </div>
-      </div>
+      )}
 
       <button 
-        onClick={() => onConfirm(consumption, householdSize)}
+        onClick={handleConfirm}
         className="w-full py-3.5 bg-gradient-to-r from-teal-500 to-blue-600 rounded-xl font-bold text-white shadow-lg hover:shadow-teal-500/30 hover:scale-[1.02] transition-all active:scale-95 flex items-center justify-center gap-2"
       >
         <span>Berechnung starten</span>

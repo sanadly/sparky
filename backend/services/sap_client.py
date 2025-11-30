@@ -140,15 +140,9 @@ class SAPClient:
             "Produkt": str(product_id)
         }
         
-        # Use user_id as PartnerID if available, otherwise a default or empty
-        partner_id = user_details.get("user_id", "") if user_details else ""
-
+        # Payload only requires STARTDATE in YYYY-MM-DD format
         payload = {
-            "STARTDATE": f"{start_date}T00:00:00",
-            "ConsumptionR1": str(consumption_r1),
-            "ConsumptionR2": str(consumption_r2),
-            "ProductID": str(product_id),
-            "PartnerID": str(partner_id)
+            "STARTDATE": str(start_date)
         }
         
         logger.info(f"🚀 CREATE OFFER PAYLOAD: {payload}")

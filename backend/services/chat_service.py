@@ -96,7 +96,11 @@ class ChatService:
         # Global Intents
         if "reset" in text_lower or "start" in text_lower:
             session_manager.reset_session(user_id)
-            return {"reply": "Alles zurückgesetzt. Hallo! Ich bin Sparky. Sag 'Hallo' um zu starten."}
+            return {
+                 "reply": "**Hallo!** 👋 Ich bin **Sparky**, dein Energieberater der INTENSE AG.\n\nMöchtest du unsere Tarife sehen, eine Simulation starten oder hast du eine Frage?",
+                 "state": STATE_START,
+                 "quick_replies": ["Tarife anzeigen", "Simulation starten", "Was kannst du?"]
+             }
 
         # Direct Product Selection (Bypass LLM)
         if text.startswith("SELECT_PRODUCT:"):
@@ -119,6 +123,8 @@ class ChatService:
                  full_product = next((p for p in products if p.get('produktId') == product_id), None)
                  is_dt = full_product and (full_product.get('etDt') == 'DT' or full_product.get('preisNT') is not None)
                  
+                 logger.info(f"DEBUG: SELECT_PRODUCT id={product_id}, is_dt={is_dt}, full_product found={full_product is not None}")
+                 
                  msg = f"Gute Wahl! Der {product_name} ist ein toller Tarif. Um dir den genauen Preis zu sagen, brauche ich noch deinen Jahresverbrauch in kWh."
                  if is_dt:
                      msg = f"Gute Wahl! Der {product_name} ist ein Doppeltarif. Bitte nenne mir deinen Verbrauch für Tag (HT) und Nacht (NT) separat (z.B. 2000 HT und 1000 NT)."
@@ -127,7 +133,7 @@ class ChatService:
                  return {
                      "reply": msg,
                      "state": STATE_WAITING_FOR_CONSUMPTION,
-                     "ui_data": {"type": "consumption_input"}
+                     "ui_data": {"type": "consumption_input", "is_dt": is_dt}
                  }
 
             return await self._run_simulation(session)
@@ -265,7 +271,7 @@ class ChatService:
                  return {
                      "reply": msg,
                      "state": STATE_WAITING_FOR_CONSUMPTION,
-                     "ui_data": {"type": "consumption_input"}
+                     "ui_data": {"type": "consumption_input", "is_dt": True}
                  }
 
             session["data"]["consumption"] = entities["consumption"]
@@ -342,7 +348,7 @@ class ChatService:
                 return {
                     "reply": f"Für den Tarif {p_name} (Doppeltarif) benötige ich deinen Verbrauch für Tag (HT) und Nacht (NT) separat. Bitte nenne mir beide Werte.",
                     "state": STATE_WAITING_FOR_CONSUMPTION,
-                    "ui_data": {"type": "consumption_input"}
+                    "ui_data": {"type": "consumption_input", "is_dt": True}
                 }
                 
             return await self._run_simulation(session)
@@ -454,6 +460,7 @@ class ChatService:
 
                 offer = sap_client.create_offer(token, product_id, start_date, consumption_r1, consumption_r2, {"user_id": user_id})
                 if offer:
+                    logger.info(f"✅ OFFER RESPONSE: {offer}")
                     # Extract ID logic
                     offer_data = offer
                     if "d" in offer:

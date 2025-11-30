@@ -11,7 +11,12 @@ from .logger import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
-BACKEND_URL = "http://localhost:8000/api/chat"
+BACKEND_URL = "http://127.0.0.1:8000/api/chat"
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log the error and send a telegram message to notify the developer."""
+    logger.error(msg="Exception while handling an update:", exc_info=context.error)
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Reset session on backend
@@ -249,6 +254,7 @@ if __name__ == '__main__':
     application.add_handler(start_handler)
     application.add_handler(message_handler)
     application.add_handler(callback_handler)
+    application.add_error_handler(error_handler)
     
     print("Telegram Bot started...")
     application.run_polling()
