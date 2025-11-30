@@ -47,8 +47,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         reply_text = data.get("reply", "Keine Antwort vom Server.")
         ui_data = data.get("ui_data", {})
+        quick_replies = data.get("quick_replies", []) # Support for quick replies (e.g. Reset Confirm)
         
-        # Prepare Keyboard based on ui_data
+        # Prepare Keyboard based on ui_data OR quick_replies
         reply_markup = None
         
         if ui_data:
@@ -85,9 +86,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup = InlineKeyboardMarkup(keyboard)
             
             elif ui_type == "offer_success":
-                # Optional: Add button to restart
-                keyboard = [[InlineKeyboardButton("Neuer Start", callback_data="cmd:restart")]]
+                offer_id = ui_data.get("offer_id", "Unbekannt")
+                # Enhance reply text with monospaced ID for easy copying
+                reply_text += f"\n\n🆔 Offer ID: `{offer_id}`"
+                
+                keyboard = [[InlineKeyboardButton("🔄 Neuer Start", callback_data="cmd:restart")]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
+
+        # Fallback: Check for Quick Replies (e.g. Reset Confirmation)
+        elif quick_replies:
+            keyboard = []
+            row = []
+            for qr in quick_replies:
+                # Map text to callback data
+                cb_data = "cmd:unknown"
+                if "ja" in qr.lower() or "neustart" in qr.lower():
+                    cb_data = "cmd:reset_confirm"
+                elif "nein" in qr.lower() or "weiter" in qr.lower():
+                    cb_data = "cmd:reset_cancel"
+                else:
+                    # Generic fallback for other quick replies
+                    cb_data = f"msg:{qr[:20]}" 
+                
+                row.append(InlineKeyboardButton(qr, callback_data=cb_data))
+                if len(row) == 2:
+                    keyboard.append(row)
+                    row = []
+            if row:
+                keyboard.append(row)
+            reply_markup = InlineKeyboardMarkup(keyboard)
 
         await update.message.reply_text(reply_text, parse_mode=constants.ParseMode.MARKDOWN, reply_markup=reply_markup)
         
@@ -130,6 +157,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message_to_send = "Verbrauch ändern"
         elif cmd == "restart":
             message_to_send = "Start"
+        elif cmd == "reset_confirm":
+            message_to_send = "Ja, Neustart"
+        elif cmd == "reset_cancel":
+            message_to_send = "Nein, weiter"
+            
+    elif data.startswith("msg:"):
+        message_to_send = data.split(":", 1)[1]
             
     if message_to_send:
         # Send "Typing..." action
@@ -148,6 +182,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             data = response.json()
             reply_text = data.get("reply", "")
             ui_data = data.get("ui_data", {})
+            quick_replies = data.get("quick_replies", [])
             
             # Prepare Keyboard based on ui_data
             reply_markup = None
@@ -186,10 +221,34 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup = InlineKeyboardMarkup(keyboard)
                 
                 elif ui_type == "offer_success":
-                    keyboard = [[InlineKeyboardButton("Neuer Start", callback_data="cmd:restart")]]
+                    offer_id = ui_data.get("offer_id", "Unbekannt")
+                    reply_text += f"\n\n🆔 Offer ID: `{offer_id}`"
+                    keyboard = [[InlineKeyboardButton("🔄 Neuer Start", callback_data="cmd:restart")]]
                     reply_markup = InlineKeyboardMarkup(keyboard)
 
-            await query.message.reply_text(reply_text, parse_mode=constants.ParseMode.MARKDOWN, reply_markup=reply_markup)
+            # Fallback: Check for Quick Replies (e.g. Reset Confirmation)
+            elif quick_replies:
+                keyboard = []
+                row = []
+                for qr in quick_replies:
+                    cb_data = "cmd:unknown"
+                    if "ja" in qr.lower() or "neustart" in qr.lower():
+                        cb_data = "cmd:reset_confirm"
+                    elif "nein" in qr.lower() or "weiter" in qr.lower():
+                        cb_data = "cmd:reset_cancel"
+                    else:
+                        cb_data = f"msg:{qr[:20]}"
+                    
+                    row.append(InlineKeyboardButton(qr, callback_data=cb_data))
+                    if len(row) == 2:
+                        keyboard.append(row)
+                        row = []
+                if row:
+                    keyboard.append(row)
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.edit_message_reply_markup(reply_markup=None) # Remove buttons from old message
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=reply_text, parse_mode=constants.ParseMode.MARKDOWN, reply_markup=reply_markup)
             
         except Exception as e:
             logger.error(f"Backend Error in callback: {e}")
