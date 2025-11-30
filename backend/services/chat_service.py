@@ -100,7 +100,11 @@ class ChatService:
     async def _handle_confirm_reset(self, session, text_lower, user_id):
         if any(x in text_lower for x in ["ja", "yes", "neustart", "reset", "ok"]):
             session_manager.reset_session(user_id)
-            return {"reply": "Alles zurückgesetzt. Hallo! Ich bin Sparky. Sag 'Hallo' um zu starten."}
+            return {
+                 "reply": "**Hallo!** 👋 Ich bin **Sparky**, dein Energieberater der INTENSE AG.\n\nMöchtest du unsere Tarife sehen, eine Simulation starten oder hast du eine Frage?",
+                 "state": STATE_START,
+                 "quick_replies": ["Tarife anzeigen", "Simulation starten", "Was kannst du?"]
+             }
         else:
             return {"reply": "Okay, wir machen weiter. (Schreibe 'Start' wenn du es dir anders überlegst).", "state": STATE_START}
 

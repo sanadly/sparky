@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { Send, Zap, Loader2 } from 'lucide-react';
 import { Message, MessageType, Product, UserState } from './types';
 import { generateChatResponse } from './services/geminiService';
@@ -21,6 +22,7 @@ const App = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [isAppLoading, setIsAppLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const hasInitialized = useRef(false);
 
   const addMessage = (msg: Omit<Message, 'id' | 'timestamp'>) => {
     const newMessage: Message = { ...msg, id: Date.now().toString(), timestamp: Date.now() };
@@ -75,6 +77,9 @@ const App = () => {
   // Initial Start
   useEffect(() => {
     const initChat = async () => {
+        if (hasInitialized.current) return;
+        hasInitialized.current = true;
+
         try {
             // Send a hidden "start" message to trigger the backend welcome flow
             const response = await generateChatResponse([], userState, "start");
@@ -188,7 +193,9 @@ const App = () => {
                   ? 'bg-energy-teal text-energy-900 ml-auto rounded-tr-sm' 
                   : 'bg-white/10 text-white mr-auto rounded-tl-sm backdrop-blur-md border border-white/5'
               }`}>
-                <div dangerouslySetInnerHTML={{ __html: msg.text?.replace(/\n/g, '<br/>') || '' }} />
+                <div className="markdown-content">
+                    <ReactMarkdown>{msg.text || ''}</ReactMarkdown>
+                </div>
               </div>
               {msg.quickReplies && msg.quickReplies.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-1 animate-slide-up">
