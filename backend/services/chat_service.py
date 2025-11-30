@@ -24,6 +24,19 @@ llm_service = LLMService()
 session_manager = SessionManager()
 
 class ChatService:
+    def _safe_float(self, value):
+        """Helper to safely convert values to float, handling commas and None."""
+        if value is None:
+            return 0.0
+        try:
+            if isinstance(value, (int, float)):
+                return float(value)
+            # Handle German format (1.200,50 -> 1200.50)
+            val_str = str(value).replace('.', '').replace(',', '.')
+            return float(val_str)
+        except (ValueError, TypeError):
+            return 0.0
+
     def _find_product_in_text(self, text, products):
         """
         Helper to find a product in text using robust matching (Token Overlap + Fuzzy).
@@ -239,6 +252,14 @@ class ChatService:
         entities = llm_service.extract_entities(text)
         logger.debug(f"Extracted entities in _handle_consumption: {entities}")
         
+        # Regex Fallback: If LLM missed consumption but there is a number > 100
+        if "consumption" not in entities:
+            numbers = re.findall(r'\b\d{3,5}\b', text)
+            if numbers:
+                # Take the first number that looks like consumption (e.g. 1500, 3500)
+                entities["consumption"] = numbers[0]
+                logger.info(f"🔢 Regex fallback found consumption: {entities['consumption']}")
+        
         if "consumption" in entities:
             session["data"]["consumption"] = entities["consumption"]
             
@@ -407,7 +428,10 @@ class ChatService:
                         elif isinstance(offer["value"], dict):
                             offer_data = offer["value"]
                         
-                    offer_id = offer_data.get("displayId") or offer_data.get("offer_id") or offer_data.get("ID") or offer_data.get("Angebotsnummer") or offer_data.get("ObjectID") or offer.get("offer_id")
+                    offer_id = offer_data.get("displayId") or offer_data.get("ObjectID") or offer_data.get("offer_id") or offer_data.get("ID") or offer_data.get("Angebotsnummer") or offer.get("offer_id")
+                    
+                    logger.info(f"🆔 Extracted Offer ID: {offer_id}")
+                    logger.debug(f"🔍 Available Offer Keys: {list(offer_data.keys())}")
                 
                     # Capture data before reset
                     product_name = session["data"].get("product_name", "Stromtarif")
@@ -549,8 +573,8 @@ class ChatService:
         
         product_ui_data = {}
         if full_product:
-             base_price = float(full_product.get("grundpreis", 0.0))
-             working_price = float(full_product.get("preisET_HT", 0.0)) * 100
+             base_price = self._safe_float(full_product.get("grundpreis"))
+             working_price = self._safe_float(full_product.get("preisET_HT")) * 100
              product_ui_data = {
                  "id": full_product.get("produktId"),
                  "name": full_product.get("bezeichnung") or full_product.get("name"),
@@ -579,8 +603,8 @@ class ChatService:
         if price is None and full_product:
             # Fallback calculation to match UI
             try:
-                bp = float(full_product.get("grundpreis", 0.0))
-                wp = float(full_product.get("preisET_HT", 0.0))
+                bp = self._safe_float(full_product.get("grundpreis"))
+                wp = self._safe_float(full_product.get("preisET_HT"))
                 price = round(bp + (float(data["consumption"]) * wp), 2)
             except Exception as e:
                 logger.warning(f"Fallback price calculation failed: {e}")
@@ -624,24 +648,22 @@ class ChatService:
                      total_price = float(sim_data.get("NET_AMOUNT", 0.0))
                      
                      # Extract components from product data directly (as seen in logs)
-                     base_price = float(p.get("grundpreis", 0.0))
+                     base_price = self._safe_float(p.get("grundpreis"))
                      # Working price is in EUR/kWh, convert to Cents/kWh
-                     working_price = float(p.get("preisET_HT", 0.0)) * 100
+                     working_price = self._safe_float(p.get("preisET_HT")) * 100
                      
                      logger.info(f"💵 Extracted prices - Base: {base_price}, Working: {working_price}, Total: {total_price}")
                  else:
                      logger.warning(f"⚠️ No simulation result for product {product_id}")
                      # Fallback to product data if simulation fails
-                     base_price = float(p.get("grundpreis", 0.0))
-                     working_price = float(p.get("preisET_HT", 0.0)) * 100
+                     base_price = self._safe_float(p.get("grundpreis"))
+                     working_price = self._safe_float(p.get("preisET_HT")) * 100
 
              products_data.append({
                  "id": p.get("produktId"),
                  "name": p.get("bezeichnung") or p.get("name"),
                  "description": p.get("beschreibung", ""),
-                 "description": p.get("beschreibung", ""),
                  "isGreen": any(x in (p.get("bezeichnung") or "").lower() for x in ["oeko", "öko", "green", "day & night", "day and night"]) or p.get("oeko", False),
-                 "basePrice": base_price,
                  "basePrice": base_price,
                  "workingPrice": working_price,
                  "totalPrice": total_price,

@@ -149,7 +149,9 @@ class SAPClient:
         logger.info(f"🚀 CREATE OFFER PAYLOAD: {payload}")
         
         try:
-            response = requests.post(settings.OFFER_URL, headers=headers, json=payload, timeout=30)
+            logger.info("⏳ Sending POST request to SAP Offer API...")
+            response = requests.post(settings.OFFER_URL, headers=headers, json=payload, timeout=5)
+            logger.info(f"✅ SAP Response received. Status: {response.status_code}")
             response.raise_for_status()
             return response.json()
         except Exception as e:
