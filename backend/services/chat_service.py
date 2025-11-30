@@ -450,8 +450,15 @@ class ChatService:
         if price is None and full_product:
             try:
                 bp = self._safe_float(full_product.get("grundpreis"))
-                wp = self._safe_float(full_product.get("preisET_HT"))
-                price = round(bp + (float(data["consumption"]) * wp), 2)
+                wp_ht = self._safe_float(full_product.get("preisET_HT"))
+                
+                if full_product.get('etDt') == 'DT' or full_product.get('preisNT') is not None:
+                    wp_nt = self._safe_float(full_product.get("preisNT"))
+                    # Recalculate split locally if needed, or use what we sent
+                    c_r1, c_r2 = self._get_consumption_split(full_product, data["consumption"])
+                    price = round(bp + (c_r1 * wp_ht) + (c_r2 * wp_nt), 2)
+                else:
+                    price = round(bp + (float(data["consumption"]) * wp_ht), 2)
             except Exception:
                 price = None
 
