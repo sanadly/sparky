@@ -10,7 +10,7 @@ const getSessionId = () => {
   return sessionId;
 };
 
-export const generateChatResponse = async (history: Message[], userState: UserState, currentMessage: string): Promise<string> => {
+export const generateChatResponse = async (history: Message[], userState: UserState, currentMessage: string): Promise<any> => {
     try {
         const response = await fetch('/api/chat', {
             method: 'POST',
@@ -29,10 +29,10 @@ export const generateChatResponse = async (history: Message[], userState: UserSt
         }
 
         const data = await response.json();
-        return data.reply || "Entschuldigung, ich habe keine Antwort erhalten.";
+        return data;
     } catch (error) {
         console.error("Chat Error", error);
-        return "Entschuldigung, ich kann den Server gerade nicht erreichen. Bitte versuchen Sie es später noch einmal.";
+        return { reply: "Entschuldigung, ich kann den Server gerade nicht erreichen. Bitte versuchen Sie es später noch einmal." };
     }
 }
 

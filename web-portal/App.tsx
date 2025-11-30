@@ -8,33 +8,13 @@ import BillPredictor from './components/BillPredictor';
 import './index.css';
 
 const App = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      type: MessageType.TEXT,
-      sender: 'bot',
-      text: 'Hallo! Ich bin Sparky, Ihr intelligenter Energie-Berater von Intense Energy. 👋⚡',
-      timestamp: Date.now()
-    },
-    {
-      id: '2',
-      type: MessageType.TEXT,
-      sender: 'bot',
-      text: 'Ich helfe Ihnen gerne dabei, den perfekten Energietarif zu finden! Dazu benötige ich zunächst ein paar Informationen.',
-      timestamp: Date.now()
-    },
-    {
-      id: '3',
-      type: MessageType.INPUT_CONSUMPTION,
-      sender: 'bot',
-      timestamp: Date.now()
-    }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
 
   const [userState, setUserState] = useState<UserState>({
     householdSize: null,
     consumption: null,
     selectedProductId: null,
+    simulation: null
   });
 
   const [inputValue, setInputValue] = useState('');
@@ -47,79 +27,138 @@ const App = () => {
     setMessages((prev) => [...prev, newMessage]);
   };
 
+  const processBackendResponse = (response: any) => {
+      // 1. Add the text reply
+      if (response.reply) {
+          addMessage({
+              type: MessageType.TEXT,
+              sender: 'bot',
+              text: response.reply,
+              quickReplies: response.quick_replies
+          });
+      }
+
+      // 2. Handle UI Data / Widgets
+      if (response.ui_data) {
+          const ui = response.ui_data;
+          
+          if (ui.type === 'consumption_input') {
+              setTimeout(() => {
+                  addMessage({
+                      type: MessageType.INPUT_CONSUMPTION,
+                      sender: 'bot'
+                  });
+              }, 500);
+          } else if (ui.type === 'product_selection') {
+              // Store products in state if needed, or just pass to widget
+              setTimeout(() => {
+                  addMessage({
+                      type: MessageType.PRODUCT_SELECTION,
+                      sender: 'bot',
+                      data: { products: ui.products } 
+                  });
+              }, 500);
+          } else if (ui.type === 'simulation_result') {
+              setTimeout(() => {
+                  addMessage({
+                      type: MessageType.SIMULATION_RESULT,
+                      sender: 'bot',
+                      data: ui.data
+                  });
+              }, 500);
+          } else if (ui.type === 'offer_success') {
+               // Handle offer success widget if exists, or just text
+          }
+      }
+  };
+
+  // Initial Start
   useEffect(() => {
-    setTimeout(() => {
-      setIsAppLoading(false);
-    }, 1500);
+    const initChat = async () => {
+        try {
+            // Send a hidden "start" message to trigger the backend welcome flow
+            const response = await generateChatResponse([], userState, "start");
+            processBackendResponse(response);
+        } catch (e) {
+            console.error("Failed to start chat", e);
+        } finally {
+            setIsAppLoading(false);
+        }
+    };
+
+    // Small delay for visual effect
+    setTimeout(initChat, 1000);
   }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  const handleConsumptionConfirm = (householdSize: number, consumption: number) => {
+  const handleConsumptionConfirm = async (householdSize: number, consumption: number) => {
     setUserState({ ...userState, householdSize, consumption });
 
     addMessage({
         type: MessageType.TEXT,
         sender: 'user',
-        text: `Wir sind ${householdSize} Personen und verbrauchen ca. ${consumption} kWh pro Jahr.`
+        text: `${consumption} kWh`
     });
 
     setIsTyping(true);
-    setTimeout(() => {
-        addMessage({
-            type: MessageType.TEXT,
-            sender: 'bot',
-            text: `Verstanden! Basierend auf einem ${householdSize}-Personen-Haushalt mit ${consumption} kWh Verbrauch habe ich diese passenden Pläne gefunden:`
-        });
-        setTimeout(() => {
-            addMessage({
-                type: MessageType.PRODUCT_SELECTION,
-                sender: 'bot',
-            });
-            setIsTyping(false);
-        }, 500);
-    }, 1200);
+    try {
+        // Send the consumption to the backend
+        const response = await generateChatResponse(messages, { ...userState, consumption }, `Mein Verbrauch ist ${consumption} kWh`);
+        processBackendResponse(response);
+    } catch (error) {
+        console.error(error);
+    } finally {
+        setIsTyping(false);
+    }
   };
 
-  const handleProductSelect = (product: Product) => {
+  const handleProductSelect = async (product: Product) => {
     setUserState(prev => ({ ...prev, selectedProductId: product.id }));
     
+    addMessage({
+        type: MessageType.TEXT,
+        sender: 'user',
+        text: `Ich wähle ${product.name}`
+    });
+
     setIsTyping(true);
-    setTimeout(() => {
-        addMessage({
-            type: MessageType.SIMULATION_RESULT,
-            sender: 'bot',
-            data: { product, consumption: userState.consumption }
-        });
+    try {
+        const response = await generateChatResponse(messages, userState, `SELECT_PRODUCT:${product.id}`);
+        processBackendResponse(response);
+    } catch (error) {
+        console.error(error);
+    } finally {
         setIsTyping(false);
-    }, 800);
+    }
   };
 
-  const handleSecureOffer = () => {
+  const handleSecureOffer = async () => {
       addMessage({
           type: MessageType.TEXT,
           sender: 'user',
-          text: "Ich möchte diesen Preis sichern."
+          text: "Angebot sichern"
       });
+      
       setIsTyping(true);
-      setTimeout(() => {
-          addMessage({
-              type: MessageType.TEXT,
-              sender: 'bot',
-              text: "Gute Wahl! Ich erstelle jetzt Ihr offizielles Angebot. Sie können mir jetzt gerne noch Fragen zu Ihrem Vertrag stellen."
-          });
+      try {
+        const response = await generateChatResponse(messages, userState, "Angebot sichern");
+        processBackendResponse(response);
+      } catch (error) {
+          console.error(error);
+      } finally {
           setIsTyping(false);
-      }, 2000);
+      }
   };
 
-  const handleSendMessage = async (e?: React.FormEvent) => {
+  const handleSendMessage = async (e?: React.FormEvent, customText?: string) => {
       if (e) e.preventDefault();
-      if (!inputValue.trim()) return;
+      const text = customText || inputValue;
+      if (!text.trim()) return;
 
-      const text = inputValue;
-      setInputValue("");
+      if (!customText) setInputValue("");
       
       addMessage({
           type: MessageType.TEXT,
@@ -131,11 +170,7 @@ const App = () => {
 
       try {
         const response = await generateChatResponse(messages, userState, text);
-        addMessage({
-            type: MessageType.TEXT,
-            sender: 'bot',
-            text: response
-        });
+        processBackendResponse(response);
       } catch (error) {
           console.error(error);
       } finally {
@@ -147,18 +182,33 @@ const App = () => {
     switch (msg.type) {
       case MessageType.TEXT:
         return (
-          <div className={`p-4 rounded-2xl max-w-[85%] animate-slide-up shadow-sm ${
-            msg.sender === 'user' 
-              ? 'bg-energy-teal text-energy-900 ml-auto rounded-tr-sm' 
-              : 'bg-white/10 text-white mr-auto rounded-tl-sm backdrop-blur-md border border-white/5'
-          }`}>
-            {msg.text}
+          <div className="flex flex-col items-start gap-2 max-w-[85%]">
+              <div className={`p-4 rounded-2xl animate-slide-up shadow-sm ${
+                msg.sender === 'user' 
+                  ? 'bg-energy-teal text-energy-900 ml-auto rounded-tr-sm' 
+                  : 'bg-white/10 text-white mr-auto rounded-tl-sm backdrop-blur-md border border-white/5'
+              }`}>
+                <div dangerouslySetInnerHTML={{ __html: msg.text?.replace(/\n/g, '<br/>') || '' }} />
+              </div>
+              {msg.quickReplies && msg.quickReplies.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-1 animate-slide-up">
+                      {msg.quickReplies.map((reply, idx) => (
+                          <button 
+                            key={idx}
+                            onClick={() => handleSendMessage(undefined, reply)}
+                            className="px-3 py-1.5 bg-white/5 hover:bg-energy-teal/20 border border-white/10 hover:border-energy-teal/50 rounded-full text-xs text-energy-teal transition-all"
+                          >
+                              {reply}
+                          </button>
+                      ))}
+                  </div>
+              )}
           </div>
         );
       case MessageType.INPUT_CONSUMPTION:
         return <ConsumptionVisualizer onConfirm={handleConsumptionConfirm} />;
       case MessageType.PRODUCT_SELECTION:
-        return <ProductCarousel userConsumption={userState.consumption} onSelectProduct={handleProductSelect} />;
+        return <ProductCarousel userConsumption={userState.consumption || 2500} onSelectProduct={handleProductSelect} products={msg.data?.products} />;
       case MessageType.SIMULATION_RESULT:
         return (
             <BillPredictor 
@@ -231,7 +281,7 @@ const App = () => {
             {/* Input Area */}
             <div className="p-4 bg-energy-900/80 backdrop-blur-md border-t border-white/5 shrink-0 z-20">
                 <form 
-                    onSubmit={handleSendMessage}
+                    onSubmit={(e) => handleSendMessage(e)}
                     className="flex items-center gap-2 bg-white/5 p-1.5 pl-4 rounded-full border border-white/10 focus-within:border-energy-teal/50 focus-within:bg-white/10 transition-all"
                 >
                     <input 
