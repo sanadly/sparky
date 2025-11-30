@@ -113,6 +113,23 @@ class ChatService:
             product_name = next((p.get('bezeichnung') or p.get('name') for p in products if p.get('produktId') == product_id), "Gewählter Tarif")
             session["data"]["product_name"] = product_name
             
+            # Check if we have consumption
+            if not session["data"].get("consumption") and not session["data"].get("consumption_r1"):
+                 # Ask for consumption
+                 full_product = next((p for p in products if p.get('produktId') == product_id), None)
+                 is_dt = full_product and (full_product.get('etDt') == 'DT' or full_product.get('preisNT') is not None)
+                 
+                 msg = f"Gute Wahl! Der {product_name} ist ein toller Tarif. Um dir den genauen Preis zu sagen, brauche ich noch deinen Jahresverbrauch in kWh."
+                 if is_dt:
+                     msg = f"Gute Wahl! Der {product_name} ist ein Doppeltarif. Bitte nenne mir deinen Verbrauch für Tag (HT) und Nacht (NT) separat (z.B. 2000 HT und 1000 NT)."
+                 
+                 session["state"] = STATE_WAITING_FOR_CONSUMPTION
+                 return {
+                     "reply": msg,
+                     "state": STATE_WAITING_FOR_CONSUMPTION,
+                     "ui_data": {"type": "consumption_input"}
+                 }
+
             return await self._run_simulation(session)
 
         # State Machine
@@ -191,13 +208,39 @@ class ChatService:
             
             # If we also have consumption in the text (e.g. "I want Product X and use 2500 kWh"), extract it
             entities = llm_service.extract_entities(text)
+            
+            # Check if it is DT to ask correctly
+            token = sap_client.get_token()
+            products = session["data"].get("products", [])
+            if not products:
+                 products = sap_client.get_products(token)
+            
+            check_id = p_id or session["data"].get("product_id")
+            full_product = next((p for p in products if p.get('produktId') == check_id), None)
+            is_dt = full_product and (full_product.get('etDt') == 'DT' or full_product.get('preisNT') is not None)
+            
             if "consumption" in entities:
-                session["data"]["consumption"] = entities["consumption"]
+                if is_dt:
+                     # User gave 1 value for DT product -> Ask for split
+                     pass # Fall through to return reply below
+                else:
+                    session["data"]["consumption"] = entities["consumption"]
+                    session["data"]["consumption_r1"] = entities["consumption"]
+                    session["data"]["consumption_r2"] = ""
+                    return await self._run_simulation(session)
+            elif "consumption_r1" in entities and "consumption_r2" in entities:
+                session["data"]["consumption"] = entities["consumption_r1"] + entities["consumption_r2"]
+                session["data"]["consumption_r1"] = entities["consumption_r1"]
+                session["data"]["consumption_r2"] = entities["consumption_r2"]
                 return await self._run_simulation(session)
             
             # Otherwise, just switch product and ask for consumption again
+            msg = f"Gute Wahl! Der {p_name} ist ein toller Tarif. Um dir den genauen Preis zu sagen, brauche ich noch deinen Jahresverbrauch in kWh."
+            if is_dt:
+                msg = f"Gute Wahl! Der {p_name} ist ein Doppeltarif. Bitte nenne mir deinen Verbrauch für Tag (HT) und Nacht (NT) separat (z.B. 2000 HT und 1000 NT)."
+
             return {
-                 "reply": f"Gute Wahl! Der {p_name} ist ein toller Tarif. Um dir den genauen Preis zu sagen, brauche ich noch deinen Jahresverbrauch in kWh.",
+                 "reply": msg,
                  "state": STATE_WAITING_FOR_CONSUMPTION,
                  "ui_data": {"type": "consumption_input"}
              }
@@ -206,7 +249,28 @@ class ChatService:
         logger.debug(f"Extracted entities in _handle_consumption: {entities}")
         
         if "consumption" in entities:
+            # Check if it is DT to ask correctly
+            token = sap_client.get_token()
+            products = session["data"].get("products", [])
+            if not products:
+                 products = sap_client.get_products(token)
+            
+            check_id = session["data"].get("product_id")
+            full_product = next((p for p in products if p.get('produktId') == check_id), None)
+            is_dt = full_product and (full_product.get('etDt') == 'DT' or full_product.get('preisNT') is not None)
+            
+            if is_dt:
+                 # User gave 1 value for DT product -> Ask for split
+                 msg = f"Für den Tarif {full_product.get('bezeichnung')} (Doppeltarif) benötige ich deinen Verbrauch für Tag (HT) und Nacht (NT) separat. Bitte nenne mir beide Werte."
+                 return {
+                     "reply": msg,
+                     "state": STATE_WAITING_FOR_CONSUMPTION,
+                     "ui_data": {"type": "consumption_input"}
+                 }
+
             session["data"]["consumption"] = entities["consumption"]
+            session["data"]["consumption_r1"] = entities["consumption"]
+            session["data"]["consumption_r2"] = ""
             
             # If we already have a product stored from a previous turn, go to simulation
             if "product_name" in session["data"]:
@@ -219,6 +283,21 @@ class ChatService:
             session["state"] = STATE_WAITING_FOR_PRODUCT_CHOICE
             return {
                 "reply": f"Verstanden, {entities['consumption']} kWh. Welchen der Tarife möchtest du wählen?",
+                "state": STATE_WAITING_FOR_PRODUCT_CHOICE,
+                "ui_data": self._get_product_ui_data(session["data"].get("products", []))
+            }
+        
+        elif "consumption_r1" in entities and "consumption_r2" in entities:
+            session["data"]["consumption_r1"] = entities["consumption_r1"]
+            session["data"]["consumption_r2"] = entities["consumption_r2"]
+            session["data"]["consumption"] = entities["consumption_r1"] + entities["consumption_r2"]
+            
+            if "product_name" in session["data"]:
+                 return await self._run_simulation(session)
+                 
+            session["state"] = STATE_WAITING_FOR_PRODUCT_CHOICE
+            return {
+                "reply": f"Verstanden, {entities['consumption_r1']} kWh (HT) und {entities['consumption_r2']} kWh (NT). Welchen der Tarife möchtest du wählen?",
                 "state": STATE_WAITING_FOR_PRODUCT_CHOICE,
                 "ui_data": self._get_product_ui_data(session["data"].get("products", []))
             }
@@ -252,6 +331,20 @@ class ChatService:
             session["data"]["product_id"] = p_id
             session["data"]["product_name"] = p_name
             logger.info(f"🎯 Direct text match found: {p_name}")
+            
+            # Check if DT and if we need more consumption data
+            token = sap_client.get_token()
+            products = session["data"].get("products", [])
+            full_product = next((p for p in products if p.get('produktId') == p_id), None)
+            is_dt = full_product and (full_product.get('etDt') == 'DT' or full_product.get('preisNT') is not None)
+            
+            if is_dt and not session["data"].get("consumption_r2"):
+                return {
+                    "reply": f"Für den Tarif {p_name} (Doppeltarif) benötige ich deinen Verbrauch für Tag (HT) und Nacht (NT) separat. Bitte nenne mir beide Werte.",
+                    "state": STATE_WAITING_FOR_CONSUMPTION,
+                    "ui_data": {"type": "consumption_input"}
+                }
+                
             return await self._run_simulation(session)
 
         extraction = llm_service.extract_entities(text)
@@ -503,7 +596,13 @@ class ChatService:
         full_product = next((p for p in products if p.get('produktId') == product_id), None)
         
         # Determine consumption split
-        consumption_r1, consumption_r2 = self._get_consumption_split(full_product, data["consumption"])
+        # Determine consumption split
+        # If we have explicit R1/R2, use them. Otherwise use split logic.
+        if data.get("consumption_r2"):
+            consumption_r1 = data["consumption_r1"]
+            consumption_r2 = data["consumption_r2"]
+        else:
+            consumption_r1, consumption_r2 = self._get_consumption_split(full_product, data["consumption"])
 
         sim_result = sap_client.simulate_price(token, consumption_r1, product_id, consumption_r2)
         
