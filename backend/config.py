@@ -1,0 +1,40 @@
+import os
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class Settings(BaseSettings):
+    # SAP Configuration
+    SAP_CLIENT_ID: str = ""
+    SAP_CLIENT_SECRET: str = ""
+    SAP_OFFER_GROUP: str = "Simulation Gruppe1"
+    
+    # SAP URLs
+    AUTH_URL: str = "https://intense-ag-development.authentication.eu10.hana.ondemand.com/oauth/token"
+    PRODUCT_URL: str = "https://intense-ag-development.it-cpi018-rt.cfapps.eu10-003.hana.ondemand.com/http/v1/s4/upil/product/information"
+    SIMULATION_URL: str = "https://intense-ag-development.it-cpi018-rt.cfapps.eu10-003.hana.ondemand.com/http/v1/s4/upil/product/simulation"
+    OFFER_URL: str = "https://intense-ag-development.it-cpi018-rt.cfapps.eu10-003.hana.ondemand.com/http/v1/servicecloud/create/offer"
+    
+    # Gemini Configuration
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "models/gemini-flash-latest"
+    
+    # Application Configuration
+    LOG_LEVEL: str = "INFO"
+    
+    # Feature Flags
+    MOCK_SAP: bool = False
+    MOCK_LLM: bool = False
+    
+    # Telegram
+    TELEGRAM_BOT_TOKEN: str = ""
+
+    model_config = SettingsConfigDict(env_file=".env", env_ignore_empty=True, extra="ignore")
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Auto-detect mocks if keys are missing or default
+        if not self.SAP_CLIENT_ID or self.SAP_CLIENT_ID == "your_client_id":
+            self.MOCK_SAP = True
+        if not self.GEMINI_API_KEY or self.GEMINI_API_KEY == "your_gemini_api_key":
+            self.MOCK_LLM = True
+
+settings = Settings()
