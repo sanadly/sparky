@@ -28,6 +28,16 @@ class Settings(BaseSettings):
     # Telegram
     TELEGRAM_BOT_TOKEN: str = ""
 
+    # Email Configuration
+    SMTP_SERVER: str = "mx2eed.netcup.net"
+    SMTP_PORT: int = 465
+    SMTP_USER: str = "tarifrechner@srv-x.de"
+    SMTP_PASSWORD: str = "453wA^xd35$2m28Kzmub68@zC91"
+    
+    # IMAP Configuration
+    IMAP_SERVER: str = "mx2eed.netcup.net"
+    IMAP_PORT: int = 993
+
     model_config = SettingsConfigDict(env_file=".env", env_ignore_empty=True, extra="ignore")
 
     def __init__(self, **kwargs):

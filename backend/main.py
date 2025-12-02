@@ -12,16 +12,46 @@ from .logger import setup_logging
 from .services.llm_service import llm_service
 from .schemas import UserMessage, PitchRequest
 from .session_manager import session_manager
-from .services.chat_service import chat_service
+from .services.chat_service import chat_service, email_service
 
 # Configure logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
+async def poll_emails():
+    while True:
+        try:
+            logger.info("📧 Polling for new emails...")
+            new_emails = await asyncio.to_thread(email_service.check_new_emails)
+            
+            for email in new_emails:
+                sender = email["sender"]
+                subject = email["subject"]
+                body = email["body"]
+                
+                logger.info(f"📩 Processing email from {sender}: {subject}")
+                
+                # Generate Reply
+                context = {
+                    "instruction": "Du bist ein Energieberater. Antworte auf die E-Mail des Kunden höflich und hilfsbereit. Fasse dich kurz.",
+                    "email_subject": subject,
+                    "email_body": body
+                }
+                reply_text = llm_service.generate_answer(body, context)
+                
+                # Send Reply
+                email_service.send_email(sender, f"Re: {subject}", reply_text)
+                
+        except Exception as e:
+            logger.error(f"Error in email polling loop: {e}")
+            
+        await asyncio.sleep(30) # Poll every 30 seconds
+
 # FastAPI App
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     asyncio.create_task(session_manager.cleanup_loop())
+    asyncio.create_task(poll_emails())
     yield
 
 app = FastAPI(lifespan=lifespan)

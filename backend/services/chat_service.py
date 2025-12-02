@@ -14,14 +14,17 @@ from ..session_manager import (
     STATE_WAITING_FOR_DATE,
     STATE_OFFER_CREATED,
     STATE_WAITING_FOR_DURATION,
-    STATE_WAITING_FOR_TARIFF_TYPE
+    STATE_WAITING_FOR_TARIFF_TYPE,
+    STATE_WAITING_FOR_EMAIL
 )
+from ..services.email_service import EmailService
 
 logger = logging.getLogger(__name__)
 
 # Instantiate services globally as they were before
 sap_client = SAPClient()
 llm_service = LLMService()
+email_service = EmailService()
 # session_manager is imported
 
 class ChatService:
@@ -157,6 +160,8 @@ class ChatService:
             return await self._handle_duration(session, text)
         elif state == STATE_WAITING_FOR_TARIFF_TYPE:
             return await self._handle_tariff_type(session, text)
+        elif state == STATE_WAITING_FOR_EMAIL:
+            return await self._handle_email(session, text, user_id)
         
         # Fallback
         return {"reply": llm_service.generate_answer(text)}
@@ -461,64 +466,97 @@ class ChatService:
             start_date_iso = date_obj.strftime("%Y-%m-%d")
             session["data"]["start_date"] = start_date_iso
             
-            try:
-                token = sap_client.get_token()
-                product_id = session["data"].get("product_id", "INT12_DEMO_PROD")
-                
-                # Retrieve consumption and split if necessary
-                consumption = session["data"].get("consumption", "2500")
-                consumption_r1 = consumption
-                consumption_r2 = ""
-                
-                products = session["data"].get("products", [])
-                if not products:
-                     products = sap_client.get_products(token)
-                
-                full_product = next((p for p in products if p.get('produktId') == product_id), None)
-                
-                consumption_r1, consumption_r2 = self._get_consumption_split(full_product, consumption)
-
-                offer, error_msg = sap_client.create_offer(token, product_id, start_date_iso, consumption_r1, consumption_r2, {"user_id": user_id})
-                if offer:
-                    logger.info(f"✅ OFFER RESPONSE: {offer}")
-                    # Extract ID logic
-                    offer_data = offer
-                    if "d" in offer:
-                        offer_data = offer["d"]
-                        if "results" in offer_data and isinstance(offer_data["results"], list) and offer_data["results"]:
-                            offer_data = offer_data["results"][0]
-                    elif "value" in offer:
-                        if isinstance(offer["value"], list) and offer["value"]:
-                            offer_data = offer["value"][0]
-                        elif isinstance(offer["value"], dict):
-                            offer_data = offer["value"]
-                        
-                    offer_id = offer_data.get("displayId") or offer_data.get("offer_id") or offer_data.get("ID") or offer_data.get("Angebotsnummer") or offer_data.get("ObjectID") or offer.get("offer_id")
-                
-                    # Capture data before reset
-                    product_name = session["data"].get("product_name", "Stromtarif")
-                    
-                    # Reset session after successful offer
-                    session_manager.reset_session(user_id) # Changed session_id to user_id
-                    session["state"] = STATE_START
-                    session["data"] = {}
-                    
-                    return {
-                        "reply": f"Geschafft! 🎉 Hier ist dein Angebot: {offer_id}",
-                        "state": STATE_OFFER_CREATED,
-                        "ui_data": {
-                            "type": "offer_success", 
-                            "offer_id": offer_id,
-                            "product_name": product_name
-                        }
-                    }
-                else:
-                    return {"reply": f"Fehler bei der Angebotserstellung: {error_msg or 'Bitte versuche es später.'}"}
-            except Exception as e:
-                logger.error(f"Error creating offer: {e}")
-                return {"reply": "Es ist ein Fehler aufgetreten. Bitte versuche es später noch einmal."}
+            session["state"] = STATE_WAITING_FOR_EMAIL
+            return {
+                "reply": "Perfekt! 📧 An welche E-Mail-Adresse darf ich dir das Angebot senden?",
+                "state": STATE_WAITING_FOR_EMAIL
+            }
         
         return {"reply": "Ich konnte kein Datum erkennen. Bitte nenne ein Datum (z.B. 01.01.2026)."}
+
+    async def _handle_email(self, session, text, user_id):
+        email = text.strip()
+        # Basic email validation
+        if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+            return {"reply": "Das sieht nicht wie eine gültige E-Mail-Adresse aus. Bitte versuche es noch einmal."}
+            
+        session["data"]["email"] = email
+        
+        try:
+            token = sap_client.get_token()
+            product_id = session["data"].get("product_id", "INT12_DEMO_PROD")
+            
+            # Retrieve consumption and split if necessary
+            consumption = session["data"].get("consumption", "2500")
+            consumption_r1 = consumption
+            consumption_r2 = ""
+            
+            products = session["data"].get("products", [])
+            if not products:
+                    products = sap_client.get_products(token)
+            
+            full_product = next((p for p in products if p.get('produktId') == product_id), None)
+            
+            consumption_r1, consumption_r2 = self._get_consumption_split(full_product, consumption)
+
+            offer = sap_client.create_offer(token, product_id, session["data"]["start_date"], consumption_r1, consumption_r2, {"user_id": user_id, "email": email})
+            error_msg = None
+            
+            if offer:
+                logger.info(f"✅ OFFER RESPONSE: {offer}")
+                # Extract ID logic
+                offer_data = offer
+                if "d" in offer:
+                    offer_data = offer["d"]
+                    if "results" in offer_data and isinstance(offer_data["results"], list) and offer_data["results"]:
+                        offer_data = offer_data["results"][0]
+                elif "value" in offer:
+                    if isinstance(offer["value"], list) and offer["value"]:
+                        offer_data = offer["value"][0]
+                    elif isinstance(offer["value"], dict):
+                        offer_data = offer["value"]
+                    
+                offer_id = offer_data.get("displayId") or offer_data.get("offer_id") or offer_data.get("ID") or offer_data.get("Angebotsnummer") or offer_data.get("ObjectID") or offer.get("offer_id")
+            
+                # Capture data before reset
+                product_name = session["data"].get("product_name", "Stromtarif")
+                
+                # Send Email
+                price_text = "auf Anfrage" # We need to recalculate or store price? 
+                # For now let's just use a generic message or try to get price from session if stored
+                # Ideally we should have stored the simulated price in session["data"]
+                
+                email_sent = email_service.send_offer_email(
+                    to_email=email,
+                    offer_id=offer_id,
+                    product_name=product_name,
+                    consumption=str(consumption),
+                    price=price_text # TODO: Pass real price
+                )
+
+                # Reset session after successful offer
+                session_manager.reset_session(user_id) # Changed session_id to user_id
+                session["state"] = STATE_START
+                session["data"] = {}
+                
+                reply_text = f"Geschafft! 🎉 Hier ist dein Angebot: {offer_id}\n\nIch habe dir die Details an **{email}** gesendet."
+                if not email_sent:
+                    reply_text += "\n(Der E-Mail-Versand hat leider nicht geklappt, aber das Angebot ist im System gespeichert.)"
+
+                return {
+                    "reply": reply_text,
+                    "state": STATE_OFFER_CREATED,
+                    "ui_data": {
+                        "type": "offer_success", 
+                        "offer_id": offer_id,
+                        "product_name": product_name
+                    }
+                }
+            else:
+                return {"reply": f"Fehler bei der Angebotserstellung: {error_msg or 'Bitte versuche es später.'}"}
+        except Exception as e:
+            logger.error(f"Error creating offer: {e}")
+            return {"reply": "Es ist ein Fehler aufgetreten. Bitte versuche es später noch einmal."}
 
     async def _handle_offer_created(self, session, text):
         if any(w in text.lower() for w in ["danke", "tschüss"]):
