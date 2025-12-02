@@ -115,8 +115,8 @@ class ChatService:
             products = session["data"].get("products", [])
             # If products not in session (e.g. restart), try to fetch or just use ID
             if not products:
-                 token = sap_client.get_token()
-                 products = sap_client.get_products(token)
+                 token = await sap_client.get_token()
+                 products = await sap_client.get_products(token)
                  session["data"]["products"] = products
             
             product_name = next((p.get('bezeichnung') or p.get('name') for p in products if p.get('produktId') == product_id), "Gewählter Tarif")
@@ -169,8 +169,8 @@ class ChatService:
     async def _handle_start(self, session, text_lower, text):
         # 1. Explicit request for products OR Affirmation (User says "Ja" to "Möchtest du Tarife sehen?")
         if any(x in text_lower for x in ["tarif", "produkte", "angebot", "zeig", "ja", "gerne", "ok", "sicher", "klar", "mach"]):
-            token = sap_client.get_token()
-            products = sap_client.get_products(token)
+            token = await sap_client.get_token()
+            products = await sap_client.get_products(token)
             if not products:
                 return {"reply": "Entschuldigung, mein Tarifrechner macht gerade Pause. Bitte versuche es später."}
             
@@ -227,10 +227,10 @@ class ChatService:
             entities = llm_service.extract_entities(text)
             
             # Check if it is DT to ask correctly
-            token = sap_client.get_token()
+            token = await sap_client.get_token()
             products = session["data"].get("products", [])
             if not products:
-                 products = sap_client.get_products(token)
+                 products = await sap_client.get_products(token)
             
             check_id = p_id or session["data"].get("product_id")
             full_product = next((p for p in products if p.get('produktId') == check_id), None)
@@ -267,10 +267,10 @@ class ChatService:
         
         if "consumption" in entities:
             # Check if it is DT to ask correctly
-            token = sap_client.get_token()
+            token = await sap_client.get_token()
             products = session["data"].get("products", [])
             if not products:
-                 products = sap_client.get_products(token)
+                 products = await sap_client.get_products(token)
             
             check_id = session["data"].get("product_id")
             full_product = next((p for p in products if p.get('produktId') == check_id), None)
@@ -350,7 +350,7 @@ class ChatService:
             logger.info(f"🎯 Direct text match found: {p_name}")
             
             # Check if DT and if we need more consumption data
-            token = sap_client.get_token()
+            token = await sap_client.get_token()
             products = session["data"].get("products", [])
             full_product = next((p for p in products if p.get('produktId') == p_id), None)
             is_dt = full_product and (full_product.get('etDt') == 'DT' or full_product.get('preisNT') is not None)
@@ -487,7 +487,7 @@ class ChatService:
         session["data"]["email"] = email
         
         try:
-            token = sap_client.get_token()
+            token = await sap_client.get_token()
             product_id = session["data"].get("product_id", "INT12_DEMO_PROD")
             
             # Retrieve consumption and split if necessary
@@ -497,13 +497,13 @@ class ChatService:
             
             products = session["data"].get("products", [])
             if not products:
-                    products = sap_client.get_products(token)
+                    products = await sap_client.get_products(token)
             
             full_product = next((p for p in products if p.get('produktId') == product_id), None)
             
             consumption_r1, consumption_r2 = self._get_consumption_split(full_product, consumption)
 
-            offer = sap_client.create_offer(token, product_id, session["data"]["start_date"], consumption_r1, consumption_r2, {"user_id": user_id, "email": email})
+            offer = await sap_client.create_offer(token, product_id, session["data"]["start_date"], consumption_r1, consumption_r2, {"user_id": user_id, "email": email})
             error_msg = None
             
             if offer:
@@ -695,8 +695,8 @@ class ChatService:
                  "ui_data": {"type": "consumption_input"}
              }
 
-        token = sap_client.get_token()
-        products = sap_client.get_products(token)
+        token = await sap_client.get_token()
+        products = await sap_client.get_products(token)
         
         # Match product
         product_id = data.get("product_id") # Check if we already have an ID (from SELECT_PRODUCT)
@@ -763,7 +763,7 @@ class ChatService:
         else:
             consumption_r1, consumption_r2 = self._get_consumption_split(full_product, data["consumption"])
 
-        sim_result = sap_client.simulate_price(token, consumption_r1, product_id, consumption_r2)
+        sim_result = await sap_client.simulate_price(token, consumption_r1, product_id, consumption_r2)
         
         session["state"] = STATE_SIMULATION_DONE
         data["product_id"] = product_id
