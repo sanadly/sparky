@@ -31,16 +31,14 @@ async def poll_emails():
                 
                 logger.info(f"📩 Processing email from {sender}: {subject}")
                 
-                # Generate Reply
-                context = {
-                    "instruction": "Du bist ein Energieberater. Antworte auf die E-Mail des Kunden höflich und hilfsbereit. Fasse dich kurz.",
-                    "email_subject": subject,
-                    "email_body": body
-                }
-                reply_text = llm_service.generate_answer(body, context)
+                # Use ChatService to handle the email content as a message
+                # This enables stateful conversation (Consumption -> Date -> Offer)
+                response = await chat_service.handle_message(sender, body)
+                reply_text = response.get("reply")
                 
-                # Send Reply
-                email_service.send_email(sender, f"Re: {subject}", reply_text)
+                if reply_text:
+                    # Send Reply
+                    email_service.send_email(sender, f"Re: {subject}", reply_text)
                 
         except Exception as e:
             logger.error(f"Error in email polling loop: {e}")

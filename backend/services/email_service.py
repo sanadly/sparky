@@ -24,7 +24,8 @@ class EmailService:
         """
         subject = f"Dein Angebot von Intense Energy: {offer_id}"
         
-        body = f"""
+        # Plain Text Fallback
+        text_body = f"""
         Hallo!
 
         Vielen Dank für dein Interesse an Intense Energy.
@@ -42,12 +43,72 @@ class EmailService:
         Dein Intense Energy Team
         """
 
-        msg = MIMEMultipart()
+        # HTML Body
+        html_body = f"""
+        <html>
+          <head>
+            <style>
+              body {{ font-family: Arial, sans-serif; color: #333; line-height: 1.6; }}
+              .container {{ max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px; background-color: #f9f9f9; }}
+              .header {{ text-align: center; padding-bottom: 20px; border-bottom: 2px solid #007bff; margin-bottom: 20px; }}
+              .header h1 {{ color: #007bff; margin: 0; }}
+              .offer-card {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
+              .offer-item {{ margin-bottom: 10px; }}
+              .offer-label {{ font-weight: bold; color: #555; }}
+              .offer-value {{ font-size: 1.1em; color: #000; }}
+              .footer {{ text-align: center; font-size: 0.8em; color: #777; margin-top: 30px; border-top: 1px solid #ddd; padding-top: 10px; }}
+              .cta {{ display: block; width: fit-content; margin: 20px auto; padding: 10px 20px; background-color: #28a745; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; }}
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>⚡ Intense Energy</h1>
+                <p>Dein persönliches Angebot</p>
+              </div>
+              
+              <p>Hallo!</p>
+              <p>Vielen Dank für dein Interesse. Hier ist das Angebot, das wir für dich berechnet haben:</p>
+              
+              <div class="offer-card">
+                <div class="offer-item">
+                  <div class="offer-label">Angebotsnummer</div>
+                  <div class="offer-value">{offer_id}</div>
+                </div>
+                <div class="offer-item">
+                  <div class="offer-label">Tarif</div>
+                  <div class="offer-value">{product_name}</div>
+                </div>
+                <div class="offer-item">
+                  <div class="offer-label">Jahresverbrauch</div>
+                  <div class="offer-value">{consumption} kWh</div>
+                </div>
+                <div class="offer-item">
+                  <div class="offer-label">Geschätzter Preis</div>
+                  <div class="offer-value" style="color: #28a745; font-weight: bold;">{price}</div>
+                </div>
+              </div>
+              
+              <p style="text-align: center; margin-top: 20px;">
+                Um das Angebot anzunehmen, antworte einfach auf diese E-Mail.
+              </p>
+              
+              <div class="footer">
+                <p>Intense Energy GmbH | Musterstraße 123 | 12345 Musterstadt</p>
+                <p>Tel: 0123 456789 | E-Mail: tarifrechner@srv-x.de</p>
+              </div>
+            </div>
+          </body>
+        </html>
+        """
+
+        msg = MIMEMultipart("alternative")
         msg['From'] = self.smtp_user
         msg['To'] = to_email
         msg['Subject'] = subject
 
-        msg.attach(MIMEText(body, 'plain'))
+        msg.attach(MIMEText(text_body, 'plain'))
+        msg.attach(MIMEText(html_body, 'html'))
 
         try:
             # Using SMTP_SSL for port 465

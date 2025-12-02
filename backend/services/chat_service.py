@@ -466,6 +466,10 @@ class ChatService:
             start_date_iso = date_obj.strftime("%Y-%m-%d")
             session["data"]["start_date"] = start_date_iso
             
+            # Check if user_id is an email
+            if "@" in user_id:
+                return await self._handle_email(session, user_id, user_id)
+            
             session["state"] = STATE_WAITING_FOR_EMAIL
             return {
                 "reply": "Perfekt! 📧 An welche E-Mail-Adresse darf ich dir das Angebot senden?",
