@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     # SAP Configuration
     SAP_CLIENT_ID: str = ""
     SAP_CLIENT_SECRET: str = ""
-    SAP_OFFER_GROUP: str = "Simulation Gruppe1"
+    SAP_OFFER_GROUP: str = "Simulation Gruppe4"
     
     # SAP URLs
     AUTH_URL: str = "https://intense-ag-development.authentication.eu10.hana.ondemand.com/oauth/token"

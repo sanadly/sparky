@@ -2,7 +2,13 @@ import requests
 import time
 import threading
 import uvicorn
-from main import app
+import sys
+import os
+
+# Add parent directory to path to allow importing backend
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from backend.main import app
 
 def run_server():
     uvicorn.run(app, host="127.0.0.1", port=8002, log_level="error")

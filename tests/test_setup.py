@@ -4,7 +4,7 @@ import os
 # Add parent directory to path to allow importing backend
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.services import sap_client
+from backend.services.sap_client import sap_client
 from backend.services import llm_service
 import requests
 import threading
