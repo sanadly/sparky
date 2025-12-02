@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     
     # Gemini Configuration
     GEMINI_API_KEY: str = ""
+    GEMINI_API_KEY_2: str = ""
     GEMINI_MODEL: str = "models/gemini-flash-latest"
     
     # Application Configuration

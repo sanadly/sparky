@@ -9,26 +9,37 @@ class LLMService:
     def __init__(self):
         self.model = None
         self.enabled = False
+        self.keys = [k for k in [settings.GEMINI_API_KEY, settings.GEMINI_API_KEY_2] if k]
+        self.current_key_index = 0
         self._initialize()
 
     def _initialize(self):
-        if settings.MOCK_LLM:
-            logger.warning("Gemini API key not found. Using Mock LLM.")
+        if not self.keys or settings.MOCK_LLM:
+            logger.warning("Gemini API key not found or Mock Mode enabled. Using Mock LLM.")
             self.enabled = False
             return
 
         try:
             import google.generativeai as genai
-            genai.configure(api_key=settings.GEMINI_API_KEY)
+            current_key = self.keys[self.current_key_index]
+            genai.configure(api_key=current_key)
             self.model = genai.GenerativeModel(
                 model_name=settings.GEMINI_MODEL,
                 system_instruction="Du bist Sparky, ein freundlicher, moderner Energieberater-Bot. Antworte immer kurz (max. 2 Sätze). Nutze Emojis ⚡. Formatiere wichtige Begriffe fett (**Wort**). Sei hilfsbereit aber locker."
             )
             self.enabled = True
-            logger.info(f"✅ Gemini AI enabled ({settings.GEMINI_MODEL})!")
+            logger.info(f"✅ Gemini AI enabled ({settings.GEMINI_MODEL}) using Key #{self.current_key_index + 1}!")
         except Exception as e:
-            logger.error(f"⚠️ Error initializing Gemini: {e}")
-            self.enabled = False
+            logger.error(f"⚠️ Error initializing Gemini with Key #{self.current_key_index + 1}: {e}")
+            self._rotate_key()
+
+    def _rotate_key(self):
+        if len(self.keys) > 1:
+            self.current_key_index = (self.current_key_index + 1) % len(self.keys)
+            logger.warning(f"🔄 Switching to Gemini Key #{self.current_key_index + 1}...")
+            self._initialize()
+            return True
+        return False
 
     def generate_answer(self, prompt, context_data=None):
         """
@@ -59,10 +70,22 @@ class LLMService:
                 full_prompt += f"Kontext: {json.dumps(context_data, ensure_ascii=False)}\n\n"
             full_prompt += f"Kunde: {prompt}\n\nDeine Antwort:"
             
-            response = self.model.generate_content(full_prompt)
-            return response.text.strip()
+            # Retry loop for fallback
+            max_retries = len(self.keys)
+            for attempt in range(max_retries):
+                try:
+                    response = self.model.generate_content(full_prompt)
+                    return response.text.strip()
+                except Exception as e:
+                    logger.error(f"Gemini API Error (Key #{self.current_key_index + 1}): {e}")
+                    if "429" in str(e) or "403" in str(e):
+                        if self._rotate_key():
+                            continue
+                    break # Stop if rotation not possible or other error
+            
+            return "Entschuldigung, ich hatte kurz technische Probleme. Kannst du das bitte wiederholen?"
         except Exception as e:
-            logger.error(f"Gemini API Error: {e}")
+            logger.error(f"Critical Gemini Error: {e}")
             return "Entschuldigung, ich hatte kurz technische Probleme. Kannst du das bitte wiederholen?"
 
     def extract_entities(self, text):
@@ -105,11 +128,15 @@ class LLMService:
                     cleaned_text = cleaned_text.split("```")[1].split("```")[0].strip()
                     
                 result = json.loads(cleaned_text)
+                result = json.loads(cleaned_text)
             except Exception as e:
-                if "429" in str(e):
-                    logger.warning(f"⚠️ Gemini Quota Exceeded (429). Falling back to Regex.")
-                else:
-                    logger.error(f"LLM Extraction Error: {e}")
+                logger.error(f"LLM Extraction Error (Key #{self.current_key_index + 1}): {e}")
+                if "429" in str(e) or "403" in str(e):
+                    if self._rotate_key():
+                        # Retry once with new key (recursive call could be dangerous, just pass for now or simple retry logic)
+                        # For simplicity in extraction, we just log and fall back to regex if rotation happens here
+                        # Ideally we would retry the extraction, but let's rely on regex fallback for robustness
+                        pass
                 pass
 
         # Fallback Logic (Always runs if key missing or LLM disabled)
