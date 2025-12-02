@@ -6,7 +6,7 @@ from ..services.sap_client import SAPClient
 from ..services.llm_service import LLMService
 
 from ..session_manager import (
-    SessionManager,
+    session_manager,
     STATE_START,
     STATE_WAITING_FOR_CONSUMPTION,
     STATE_WAITING_FOR_PRODUCT_CHOICE,
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # Instantiate services globally as they were before
 sap_client = SAPClient()
 llm_service = LLMService()
-session_manager = SessionManager()
+# session_manager is imported
 
 class ChatService:
     def _find_product_in_text(self, text, products):
@@ -442,12 +442,26 @@ class ChatService:
             start_date = entities["date"]
             # Validation logic (simplified for brevity, original logic was good but long)
             # Assuming date is valid for now or adding basic check
+            # Validation logic
+            date_obj = None
             try:
-                date_obj = datetime.strptime(start_date, "%Y-%m-%d")
-                if date_obj < datetime.now():
-                     return {"reply": "Das Datum liegt in der Vergangenheit. Bitte nenne ein Datum in der Zukunft."}
-                
-                session["data"]["start_date"] = start_date
+                # Try standard ISO format first (LLM output)
+                date_obj = datetime.strptime(start_date.strip(), "%Y-%m-%d")
+            except ValueError:
+                try:
+                    # Try German format (User input / Fallback)
+                    date_obj = datetime.strptime(start_date.strip(), "%d.%m.%Y")
+                except ValueError:
+                    return {"reply": "Ungültiges Datumsformat. Bitte nutze TT.MM.JJJJ."}
+            
+            if date_obj < datetime.now():
+                 return {"reply": "Das Datum liegt in der Vergangenheit. Bitte nenne ein Datum in der Zukunft."}
+            
+            # Normalize to ISO for SAP and Session
+            start_date_iso = date_obj.strftime("%Y-%m-%d")
+            session["data"]["start_date"] = start_date_iso
+            
+            try:
                 token = sap_client.get_token()
                 product_id = session["data"].get("product_id", "INT12_DEMO_PROD")
                 
@@ -464,7 +478,7 @@ class ChatService:
                 
                 consumption_r1, consumption_r2 = self._get_consumption_split(full_product, consumption)
 
-                offer, error_msg = sap_client.create_offer(token, product_id, start_date, consumption_r1, consumption_r2, {"user_id": user_id})
+                offer, error_msg = sap_client.create_offer(token, product_id, start_date_iso, consumption_r1, consumption_r2, {"user_id": user_id})
                 if offer:
                     logger.info(f"✅ OFFER RESPONSE: {offer}")
                     # Extract ID logic
@@ -500,8 +514,9 @@ class ChatService:
                     }
                 else:
                     return {"reply": f"Fehler bei der Angebotserstellung: {error_msg or 'Bitte versuche es später.'}"}
-            except ValueError:
-                 return {"reply": "Ungültiges Datumsformat. Bitte nutze TT.MM.JJJJ."}
+            except Exception as e:
+                logger.error(f"Error creating offer: {e}")
+                return {"reply": "Es ist ein Fehler aufgetreten. Bitte versuche es später noch einmal."}
         
         return {"reply": "Ich konnte kein Datum erkennen. Bitte nenne ein Datum (z.B. 01.01.2026)."}
 

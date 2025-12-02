@@ -7,6 +7,8 @@ import ConsumptionVisualizer from './components/ConsumptionVisualizer';
 import ProductCarousel from './components/ProductCarousel';
 import BillPredictor from './components/BillPredictor';
 import DateSelector from './components/DateSelector';
+import DurationSelector from './components/DurationSelector';
+import TariffTypeSelector from './components/TariffTypeSelector';
 import './index.css';
 
 const App = () => {
@@ -84,6 +86,22 @@ const App = () => {
                         type: MessageType.OFFER_SUCCESS,
                         sender: 'bot',
                         data: ui
+                    });
+                }, 500);
+            } else if (ui.type === 'duration_selection') {
+                setTimeout(() => {
+                    addMessage({
+                        type: MessageType.DURATION_SELECTION,
+                        sender: 'bot',
+                        data: {}
+                    });
+                }, 500);
+            } else if (ui.type === 'tariff_type_selection') {
+                setTimeout(() => {
+                    addMessage({
+                        type: MessageType.TARIFF_TYPE_SELECTION,
+                        sender: 'bot',
+                        data: {}
                     });
                 }, 500);
             }
@@ -222,6 +240,42 @@ const App = () => {
         }
     };
 
+    const handleDurationSelect = async (duration: string) => {
+        addMessage({
+            type: MessageType.TEXT,
+            sender: 'user',
+            text: duration
+        });
+
+        setIsTyping(true);
+        try {
+            const response = await generateChatResponse(messages, userState, duration);
+            processBackendResponse(response);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsTyping(false);
+        }
+    };
+
+    const handleTariffTypeSelect = async (type: string) => {
+        addMessage({
+            type: MessageType.TEXT,
+            sender: 'user',
+            text: type
+        });
+
+        setIsTyping(true);
+        try {
+            const response = await generateChatResponse(messages, userState, type);
+            processBackendResponse(response);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsTyping(false);
+        }
+    };
+
     const handleSendMessage = async (e?: React.FormEvent, customText?: string) => {
         if (e) e.preventDefault();
         const text = customText || inputValue;
@@ -318,6 +372,10 @@ const App = () => {
                         </button>
                     </div>
                 );
+            case MessageType.DURATION_SELECTION:
+                return <DurationSelector onSelect={handleDurationSelect} />;
+            case MessageType.TARIFF_TYPE_SELECTION:
+                return <TariffTypeSelector onSelect={handleTariffTypeSelect} />;
             default:
                 return null;
         }

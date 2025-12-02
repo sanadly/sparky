@@ -4,7 +4,9 @@ export enum MessageType {
   PRODUCT_SELECTION = 'product_selection',
   SIMULATION_RESULT = 'simulation_result',
   INPUT_DATE = 'input_date',
-  OFFER_SUCCESS = 'offer_success'
+  OFFER_SUCCESS = 'offer_success',
+  DURATION_SELECTION = 'duration_selection',
+  TARIFF_TYPE_SELECTION = 'tariff_type_selection'
 }
 
 export interface Message {
