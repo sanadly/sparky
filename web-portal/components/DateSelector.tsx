@@ -1,81 +1,104 @@
 import React, { useState } from 'react';
 import { Calendar, ArrowRight } from 'lucide-react';
 
-interface Props {
-  onDateSubmit: (date: string) => void;
+interface DateSelectorProps {
+  onSelect: (date: string) => void;
 }
 
-const DateSelector: React.FC<Props> = ({ onDateSubmit }) => {
-  const [date, setDate] = useState('');
-  
-  React.useEffect(() => {
-      console.log("DateSelector mounted");
-  }, []);
+const DateSelector: React.FC<DateSelectorProps> = ({ onSelect }) => {
+  const [customDate, setCustomDate] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const formatDate = (date: Date): string => {
+    const d = date.getDate().toString().padStart(2, '0');
+    const m = (date.getMonth() + 1).toString().padStart(2, '0');
+    const y = date.getFullYear();
+    return `${d}.${m}.${y}`;
+  };
+
+  const handleCustomSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (date) {
-      // Convert YYYY-MM-DD to DD.MM.YYYY for chat display
-      const [y, m, d] = date.split('-');
-      onDateSubmit(`${d}.${m}.${y}`);
+    if (customDate) {
+      onSelect(customDate);
     }
   };
 
-  const getFutureDate = (monthsAhead: number) => {
+  const getNextMonthFirst = () => {
     const d = new Date();
-    d.setMonth(d.getMonth() + monthsAhead);
-    d.setDate(1); // 1st of the month
-    return d.toISOString().split('T')[0];
+    d.setMonth(d.getMonth() + 1);
+    d.setDate(1);
+    return d;
   };
 
-  const quickDates = [
-    { label: 'Nächster Monat', value: getFutureDate(1) },
-    { label: 'In 3 Monaten', value: getFutureDate(3) },
-    { label: 'Nächstes Jahr', value: getFutureDate(12) },
-  ];
+  const getInThreeMonthsFirst = () => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 3);
+    d.setDate(1);
+    return d;
+  };
+
+  const getInOneYearFirst = () => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() + 1);
+    d.setDate(1);
+    return d;
+  };
+
+  const nextMonth = getNextMonthFirst();
+  const inThreeMonths = getInThreeMonthsFirst();
+  const inOneYear = getInOneYearFirst();
 
   return (
-    <div className="w-full max-w-md mx-auto mt-4 animate-slide-up relative z-30">
-      <div className="bg-energy-800/90 backdrop-blur-xl rounded-2xl p-6 border border-energy-teal/30 shadow-[0_0_30px_rgba(0,0,0,0.3)]">
-        <div className="flex items-center gap-3 mb-4 text-energy-teal">
-          <Calendar className="w-6 h-6" />
-          <h3 className="text-lg font-bold text-white">Startdatum wählen</h3>
+    <div className="w-full max-w-sm bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10 shadow-xl animate-slide-up">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 rounded-full bg-energy-teal/20 flex items-center justify-center">
+          <Calendar className="text-energy-teal" size={20} />
         </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="relative">
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              min={new Date().toISOString().split('T')[0]}
-              className="w-full bg-black/20 border border-white/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-energy-teal focus:ring-1 focus:ring-energy-teal transition-all"
-              required
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {quickDates.map((qd) => (
-              <button
-                key={qd.label}
-                type="button"
-                onClick={() => setDate(qd.value)}
-                className="text-xs px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-colors"
-              >
-                {qd.label}
-              </button>
-            ))}
-          </div>
-
-          <button
-            type="submit"
-            disabled={!date}
-            className="w-full bg-gradient-to-r from-energy-teal to-blue-500 text-white font-bold py-3 rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            Bestätigen <ArrowRight size={18} />
-          </button>
-        </form>
+        <div>
+          <h3 className="text-white font-medium">Vertragsbeginn wählen</h3>
+          <p className="text-xs text-gray-400">Wann soll es losgehen?</p>
+        </div>
       </div>
+
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <button
+          onClick={() => onSelect(formatDate(nextMonth))}
+          className="p-3 rounded-xl bg-white/5 hover:bg-energy-teal/10 border border-white/10 hover:border-energy-teal/50 transition-all text-sm text-white text-left group"
+        >
+          <span className="block text-xs text-gray-400 mb-0.5">Nächster Monat</span>
+          <span className="font-medium group-hover:text-energy-teal">{formatDate(nextMonth)}</span>
+        </button>
+        <button
+          onClick={() => onSelect(formatDate(inThreeMonths))}
+          className="p-3 rounded-xl bg-white/5 hover:bg-energy-teal/10 border border-white/10 hover:border-energy-teal/50 transition-all text-sm text-white text-left group"
+        >
+          <span className="block text-xs text-gray-400 mb-0.5">In 3 Monaten</span>
+          <span className="font-medium group-hover:text-energy-teal">{formatDate(inThreeMonths)}</span>
+        </button>
+         <button
+          onClick={() => onSelect(formatDate(inOneYear))}
+          className="p-3 rounded-xl bg-white/5 hover:bg-energy-teal/10 border border-white/10 hover:border-energy-teal/50 transition-all text-sm text-white text-left group col-span-2"
+        >
+          <span className="block text-xs text-gray-400 mb-0.5">In 1 Jahr</span>
+          <span className="font-medium group-hover:text-energy-teal">{formatDate(inOneYear)}</span>
+        </button>
+      </div>
+
+      <form onSubmit={handleCustomSubmit} className="relative">
+        <input
+          type="text"
+          placeholder="Anderes Datum (TT.MM.JJJJ)"
+          value={customDate}
+          onChange={(e) => setCustomDate(e.target.value)}
+          className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:border-energy-teal/50 transition-all text-sm"
+        />
+        <button
+          type="submit"
+          disabled={!customDate}
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-energy-teal text-energy-900 rounded-lg hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 transition-all"
+        >
+          <ArrowRight size={16} />
+        </button>
+      </form>
     </div>
   );
 };

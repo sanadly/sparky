@@ -4,8 +4,8 @@ import os
 # Add parent directory to path to allow importing backend
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.services import sap_client
-from backend.services import llm_service
+from backend.services.sap_client import sap_client
+from backend.services.llm_service import llm_service
 import requests
 import threading
 import time
@@ -23,7 +23,9 @@ def test_sap_client():
     sim = sap_client.simulate_price(token, 1000, "PROD-1")
     print(f"Simulation: {sim}")
     
-    offer = sap_client.create_offer(token, "PROD-1", "2025-01-01", {"name": "Test User"})
+    from datetime import datetime, timedelta
+    future_date = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+    offer = sap_client.create_offer(token, "PROD-1", future_date, {"name": "Test User"})
     print(f"Offer: {offer}")
     print("-" * 20)
 

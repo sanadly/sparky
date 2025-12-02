@@ -1,4 +1,4 @@
-import httpx
+import requests
 import base64
 import logging
 from typing import List, Dict, Any, Optional
@@ -9,12 +9,8 @@ logger = logging.getLogger(__name__)
 class SAPClient:
     def __init__(self):
         self.token: Optional[str] = None
-        self.client = httpx.AsyncClient(timeout=30.0)
         
-    async def close(self):
-        await self.client.aclose()
-        
-    async def get_token(self) -> str:
+    def get_token(self) -> str:
         """
         Fetches an OAuth2 Bearer token from SAP.
         """
@@ -38,7 +34,7 @@ class SAPClient:
         }
         
         try:
-            response = await self.client.post(settings.AUTH_URL, headers=headers, data=data)
+            response = requests.post(settings.AUTH_URL, headers=headers, data=data)
             response.raise_for_status()
             self.token = response.json().get("access_token")
             if not self.token:
@@ -48,16 +44,16 @@ class SAPClient:
             logger.error(f"Error fetching token: {e}")
             return "mock_token"
 
-    async def get_products(self, token: str) -> List[Dict[str, Any]]:
+    def get_products(self, token: str) -> List[Dict[str, Any]]:
         """
         Fetches products.
         Filter: vertriebskanal == 'Chatbot'
         """
         if token == "mock_token":
             return [
-                {"name": "INTENSIVE 12 Demo-Produkt", "bezeichnung": "INTENSIVE 12 Demo-Produkt", "basePrice": 120.00, "workingPrice": 32.5, "vertriebskanal": "Chatbot", "produktId": "INT12_DEMO_PROD"},
-                {"name": "INTENSIVE 24 Demo-Produkt", "bezeichnung": "INTENSIVE 24 Demo-Produkt", "basePrice": 110.00, "workingPrice": 31.0, "vertriebskanal": "Chatbot", "produktId": "INT24_DEMO_PROD"},
-                {"name": "Green Energy Eco", "bezeichnung": "Green Energy Eco", "basePrice": 140.00, "workingPrice": 34.5, "vertriebskanal": "Chatbot", "oeko": True, "produktId": "GREEN_ECO_PROD"}
+                {"name": "INTENSIVE 12 Demo-Produkt", "bezeichnung": "INTENSIVE 12 Demo-Produkt", "basePrice": 120.00, "workingPrice": 32.5, "vertriebskanal": "Chatbot"},
+                {"name": "INTENSIVE 24 Demo-Produkt", "bezeichnung": "INTENSIVE 24 Demo-Produkt", "basePrice": 110.00, "workingPrice": 31.0, "vertriebskanal": "Chatbot"},
+                {"name": "Green Energy Eco", "bezeichnung": "Green Energy Eco", "basePrice": 140.00, "workingPrice": 34.5, "vertriebskanal": "Chatbot", "oeko": True}
             ]
 
         headers = {
@@ -65,7 +61,7 @@ class SAPClient:
         }
         
         try:
-            response = await self.client.get(settings.PRODUCT_URL, headers=headers)
+            response = requests.get(settings.PRODUCT_URL, headers=headers)
             response.raise_for_status()
             all_products = response.json()
             
@@ -90,12 +86,12 @@ class SAPClient:
             logger.error(f"Error fetching products: {e}")
             return []
 
-    async def simulate_price(self, token: str, consumption_r1: float, product_id: str, consumption_r2: str = "") -> Optional[Dict[str, Any]]:
+    def simulate_price(self, token: str, consumption_r1: float, product_id: str, consumption_r2: str = "") -> Optional[Dict[str, Any]]:
         """
         Simulates price.
         """
         if token == "mock_token":
-            return {"total_price": 123.45, "currency": "EUR", "BillSimulation": {"NET_AMOUNT": 123.45}}
+            return {"total_price": 123.45, "currency": "EUR"}
 
         headers = {
             "Authorization": f"Bearer {token}",
@@ -111,7 +107,7 @@ class SAPClient:
         logger.info(f"🚀 SIMULATION PAYLOAD: {payload}")
         
         try:
-            response = await self.client.get(settings.SIMULATION_URL, headers=headers, params=payload)
+            response = requests.get(settings.SIMULATION_URL, headers=headers, json=payload)
             response.raise_for_status()
             sim_result = response.json()
             logger.info(f"💰 RAW SIMULATION RESPONSE (GET): {sim_result}")
@@ -119,19 +115,16 @@ class SAPClient:
         except Exception as e:
             logger.warning(f"GET Simulation failed: {e}. Trying POST...")
             try:
-                response = await self.client.post(settings.SIMULATION_URL, headers=headers, json=payload)
+                response = requests.post(settings.SIMULATION_URL, headers=headers, json=payload)
                 response.raise_for_status()
                 sim_result = response.json()
                 logger.info(f"💰 RAW SIMULATION RESPONSE (POST): {sim_result}")
                 return sim_result
             except Exception as e2:
                 logger.error(f"Error simulating price (POST): {e2}")
-                # httpx exceptions might not have 'response' attribute in the same way as requests
-                if hasattr(e2, 'response') and e2.response is not None:
-                     logger.error(f"SAP Error Response Body: {e2.response.text}")
                 return None
 
-    async def create_offer(self, token: str, product_id: str, start_date: str, consumption_r1: float, consumption_r2: str = "", user_details: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    def create_offer(self, token: str, product_id: str, start_date: str, consumption_r1: float, consumption_r2: str = "", user_details: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         """
         Creates an offer.
         """
@@ -147,16 +140,15 @@ class SAPClient:
             "Produkt": str(product_id)
         }
         
+        # Payload only requires STARTDATE in YYYY-MM-DD format
         payload = {
-            "STARTDATE": f"{start_date}"
+            "STARTDATE": str(start_date)
         }
         
         logger.info(f"🚀 CREATE OFFER PAYLOAD: {payload}")
         
         try:
-            logger.info("⏳ Sending POST request to SAP Offer API...")
-            response = await self.client.post(settings.OFFER_URL, headers=headers, json=payload, timeout=10.0)
-            logger.info(f"✅ SAP Response received. Status: {response.status_code}")
+            response = requests.post(settings.OFFER_URL, headers=headers, json=payload)
             response.raise_for_status()
             return response.json()
         except Exception as e:

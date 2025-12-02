@@ -12,7 +12,7 @@ from .logger import setup_logging
 from .services.llm_service import llm_service
 from .schemas import UserMessage, PitchRequest
 from .session_manager import session_manager
-from .services.chat_service import chat_service
+from .services.chat_service import chat_service, email_service
 
 # Configure logging
 setup_logging()
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     asyncio.create_task(session_manager.cleanup_loop())
+    asyncio.create_task(email_service.run_email_polling(chat_service))
     yield
 
 app = FastAPI(lifespan=lifespan)

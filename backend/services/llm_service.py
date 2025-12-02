@@ -63,7 +63,12 @@ class LLMService:
             response = self.model.generate_content(full_prompt)
             return response.text.strip()
         except Exception as e:
-            logger.error(f"Gemini API Error: {e}")
+            error_msg = str(e)
+            logger.error(f"Gemini API Error: {error_msg}")
+            
+            if "429" in error_msg:
+                return "Entschuldigung, ich bin gerade etwas überlastet (zu viele Anfragen). Bitte versuche es in einer Minute noch einmal. ⏳"
+                
             return "Entschuldigung, ich hatte kurz technische Probleme. Kannst du das bitte wiederholen?"
 
     def extract_entities(self, text):
@@ -87,7 +92,9 @@ class LLMService:
                    - "rejection": User lehnt ab.
                 
                 2. Daten (falls vorhanden):
-                   - consumption (Zahl in kWh, z.B. 3500)
+                   - consumption (Zahl in kWh, z.B. 3500) -> Falls nur EINE Zahl genannt wird.
+                   - consumption_r1 (Zahl in kWh) -> Tagstrom / HT / erster Wert.
+                   - consumption_r2 (Zahl in kWh) -> Nachtstrom / NT / zweiter Wert.
                    - date (Datum im Format YYYY-MM-DD)
                    - product_name (Name des Tarifs)
                 
@@ -109,16 +116,19 @@ class LLMService:
                 pass
 
         # Fallback Logic (Always runs if key missing or LLM disabled)
-        if "consumption" not in result:
+        if "consumption" not in result and "consumption_r1" not in result:
             # Explicit "Verbrauch: X" pattern
             explicit_match = re.search(r'Verbrauch[:\s]+(\d{3,5})', text, re.IGNORECASE)
             if explicit_match:
                 result['consumption'] = int(explicit_match.group(1))
             else:
-                # Standalone numbers
-                consumption_match = re.search(r'\b(\d{3,5})\b', text)
-                if consumption_match:
-                    result['consumption'] = int(consumption_match.group(1))
+                # Look for two numbers for HT/NT
+                two_nums = re.findall(r'\b(\d{3,5})\b', text)
+                if len(two_nums) >= 2:
+                    result['consumption_r1'] = int(two_nums[0])
+                    result['consumption_r2'] = int(two_nums[1])
+                elif len(two_nums) == 1:
+                    result['consumption'] = int(two_nums[0])
 
         if "date" not in result:
             date_match = re.search(r'\b(\d{1,2}\.\d{1,2}\.\d{4})\b', text)
