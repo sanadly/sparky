@@ -19,7 +19,7 @@ class EmailService:
         self.imap_server = settings.IMAP_SERVER
         self.imap_port = settings.IMAP_PORT
 
-    def send_offer_email(self, to_email: str, offer_id: str, product_name: str, consumption: str, price: str):
+    async def send_offer_email(self, to_email: str, offer_id: str, product_name: str, consumption: str, price: str):
         """
         Sends an email with the offer details to the user.
         """
@@ -123,16 +123,19 @@ class EmailService:
 
         try:
             # Using SMTP_SSL for port 465
-            with smtplib.SMTP_SSL(self.smtp_server, self.smtp_port) as server:
-                server.login(self.smtp_user, self.smtp_password)
-                server.send_message(msg)
+            def _send():
+                with smtplib.SMTP_SSL(self.smtp_server, self.smtp_port) as server:
+                    server.login(self.smtp_user, self.smtp_password)
+                    server.send_message(msg)
+            
+            await asyncio.to_thread(_send)
             logger.info(f"✅ Email sent successfully to {to_email}")
             return True
         except Exception as e:
             logger.error(f"❌ Failed to send email: {e}")
             return False
 
-    def send_email(self, to_email: str, subject: str, body: str):
+    async def send_email(self, to_email: str, subject: str, body: str):
         """
         Sends a generic email.
         """
@@ -144,9 +147,12 @@ class EmailService:
         msg.attach(MIMEText(body, 'plain'))
 
         try:
-            with smtplib.SMTP_SSL(self.smtp_server, self.smtp_port) as server:
-                server.login(self.smtp_user, self.smtp_password)
-                server.send_message(msg)
+            def _send():
+                with smtplib.SMTP_SSL(self.smtp_server, self.smtp_port) as server:
+                    server.login(self.smtp_user, self.smtp_password)
+                    server.send_message(msg)
+            
+            await asyncio.to_thread(_send)
             logger.info(f"✅ Generic email sent successfully to {to_email}")
             return True
         except Exception as e:
@@ -228,13 +234,27 @@ class EmailService:
                     
                     logger.info(f"📩 Processing email from {sender}: {subject}")
                     
+                    # Clean up body (remove quoted replies)
+                    cleaned_body = body
+                    lines = body.splitlines()
+                    non_quoted_lines = []
+                    for line in lines:
+                        if line.strip().startswith(">") or line.strip().startswith("On ") and "wrote:" in line:
+                             break # Stop at first quote
+                        non_quoted_lines.append(line)
+                    
+                    if non_quoted_lines:
+                        cleaned_body = "\n".join(non_quoted_lines).strip()
+                    
+                    logger.info(f"📝 Cleaned Email Body for LLM: {cleaned_body[:200]}...") # Log first 200 chars
+
                     # Use ChatService to handle the email content as a message
-                    response = await chat_service_instance.handle_message(sender, body)
+                    response = await chat_service_instance.handle_message(sender, cleaned_body)
                     reply_text = response.get("reply")
                     
                     if reply_text:
                         # Send Reply
-                        self.send_email(sender, f"Re: {subject}", reply_text)
+                        await self.send_email(sender, f"Re: {subject}", reply_text)
                     
             except Exception as e:
                 error_msg = str(e)
@@ -243,4 +263,4 @@ class EmailService:
                 else:
                     logger.error(f"Error in email polling loop: {e}")
                 
-            await asyncio.sleep(30) # Poll every 30 seconds
+            await asyncio.sleep(10) # Poll every 10 seconds

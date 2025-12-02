@@ -10,8 +10,7 @@ def setup_logging():
         level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler("backend.log")
+            logging.StreamHandler()
         ]
     )
     

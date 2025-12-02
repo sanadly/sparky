@@ -139,7 +139,7 @@ class LLMService:
             
             1. intent (String):
                - "selection": User wählt ein Produkt oder nennt Daten (Verbrauch, Datum).
-               - "show_products": User möchte Tarife/Produkte sehen (z.B. "Zeig mir Tarife", "Angebot", "Ja").
+               - "show_products": User möchte Tarife/Produkte sehen oder ein Angebot erhalten (z.B. "Zeig mir Tarife", "Angebot", "Ja", "Ich möchte ein Angebot").
                - "recommendation": User fragt nach Empfehlung/Hilfe.
                - "question": User stellt eine allgemeine Frage (z.B. "Was kannst du?").
                - "correction": User korrigiert eine vorherige Eingabe.
@@ -150,6 +150,7 @@ class LLMService:
                - consumption (Zahl in kWh, z.B. 3500) -> Falls nur EINE Zahl genannt wird.
                - consumption_r1 (Zahl in kWh) -> Tagstrom / HT / erster Wert.
                - consumption_r2 (Zahl in kWh) -> Nachtstrom / NT / zweiter Wert.
+               - household_size (Zahl) -> Anzahl der Personen im Haushalt (z.B. 2).
                - date (Datum im Format YYYY-MM-DD)
                - product_name (Name des Tarifs)
             
@@ -180,6 +181,11 @@ class LLMService:
                     cleaned_text = cleaned_text.split("```")[1].split("```")[0].strip()
                     
                 result = json.loads(cleaned_text)
+                
+                # Flatten structure if 'data' key exists
+                if "data" in result and isinstance(result["data"], dict):
+                    result.update(result["data"])
+                    del result["data"]
             except Exception as e:
                 logger.error(f"LLM Extraction Error ({self.provider}): {e}")
                 pass

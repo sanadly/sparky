@@ -172,6 +172,11 @@ class ChatService:
         intent = entities.get("intent", "unknown")
         logger.info(f"🧠 Start Handler Intent: {intent}, Entities: {entities}")
 
+        # Fallback: If LLM fails to recognize "Angebot" as show_products
+        if intent in ["unknown", "question"] and "angebot" in text_lower:
+             logger.info("⚠️ Fallback: 'Angebot' detected in text, forcing intent to 'show_products'")
+             intent = "show_products"
+
         # 2. Handle "Show Products" Intent
         if intent == "show_products" or (intent == "confirmation" and any(x in text_lower for x in ["ja", "gerne", "ok"])):
             token = await sap_client.get_token()
@@ -194,13 +199,35 @@ class ChatService:
              # Pass to _handle_consumption to process the data immediately
              return await self._handle_consumption(session, text)
 
-        # 4. Handle General Questions / Greetings
+        # 4. Handle Household Size (Estimation)
+        if "household_size" in entities:
+             size = int(entities["household_size"])
+             estimated_consumption = 1500
+             if size == 2: estimated_consumption = 2500
+             elif size == 3: estimated_consumption = 3500
+             elif size == 4: estimated_consumption = 4250
+             elif size >= 5: estimated_consumption = 5000
+             
+             session["data"]["consumption"] = estimated_consumption
+             session["data"]["consumption_r1"] = estimated_consumption
+             session["data"]["consumption_r2"] = ""
+             
+             # Proceed to simulation or product choice
+             session["state"] = STATE_WAITING_FOR_PRODUCT_CHOICE
+             return {
+                 "reply": f"Für {size} Personen rechne ich mit ca. {estimated_consumption} kWh. Welchen Tarif möchtest du wählen?",
+                 "state": STATE_WAITING_FOR_PRODUCT_CHOICE,
+                 "ui_data": await self._get_product_ui_data(session["data"].get("products", []), consumption=estimated_consumption)
+             }
+
+        # 5. Handle General Questions / Greetings
         # Fallback to LLM answer if it's a question or recommendation request
         if intent in ["question", "recommendation"] or any(x in text_lower for x in ["was", "wie", "wer", "hallo", "hi"]):
              context = {"state": "start", "instruction": "Du bist ein Energieberater. Beantworte die Frage kurz und frage dann: 'Möchtest du unsere Tarife sehen?'"}
              return {"reply": llm_service.generate_answer(text, context)}
 
-        # 5. Fallback for completely unknown inputs
+
+        # 6. Fallback for completely unknown inputs
         return {
              "reply": "Das habe ich nicht ganz verstanden. Möchtest du unsere Tarife sehen? (Antworte mit Ja)",
              "state": STATE_START
@@ -229,8 +256,34 @@ class ChatService:
             full_product = next((p for p in products if p.get('produktId') == check_id), None)
             is_dt = full_product and (full_product.get('etDt') == 'DT' or full_product.get('preisNT') is not None)
             
+            if "household_size" in entities:
+                 size = int(entities["household_size"])
+                 estimated_consumption = 1500
+                 if size == 2: estimated_consumption = 2500
+                 elif size == 3: estimated_consumption = 3500
+                 elif size == 4: estimated_consumption = 4250
+                 elif size >= 5: estimated_consumption = 5000
+                 
+                 entities["consumption"] = estimated_consumption # Inject into entities
+                 logger.info(f"🏠 Estimated consumption for {size} persons (Combined): {estimated_consumption} kWh")
+                 
+                 # Automatic Split for DT (70% HT, 30% NT)
+                 if is_dt:
+                     r1 = int(estimated_consumption * 0.7)
+                     r2 = estimated_consumption - r1
+                     entities["consumption_r1"] = r1
+                     entities["consumption_r2"] = r2
+                     logger.info(f"⚖️ Auto-split for DT: R1={r1}, R2={r2}")
+
             if "consumption" in entities:
                 if is_dt:
+                     # Check if we have an auto-split (or explicit split) available
+                     if "consumption_r1" in entities and "consumption_r2" in entities:
+                         session["data"]["consumption"] = entities["consumption"]
+                         session["data"]["consumption_r1"] = entities["consumption_r1"]
+                         session["data"]["consumption_r2"] = entities["consumption_r2"]
+                         return await self._run_simulation(session)
+                         
                      # User gave 1 value for DT product -> Ask for split
                      pass # Fall through to return reply below
                 else:
@@ -258,6 +311,17 @@ class ChatService:
         entities = llm_service.extract_entities(text)
         logger.debug(f"Extracted entities in _handle_consumption: {entities}")
         
+        if "household_size" in entities:
+             size = int(entities["household_size"])
+             estimated_consumption = 1500
+             if size == 2: estimated_consumption = 2500
+             elif size == 3: estimated_consumption = 3500
+             elif size == 4: estimated_consumption = 4250
+             elif size >= 5: estimated_consumption = 5000
+             
+             entities["consumption"] = estimated_consumption # Inject into entities for downstream logic
+             logger.info(f"🏠 Estimated consumption for {size} persons: {estimated_consumption} kWh")
+
         if "consumption" in entities:
             # Check if it is DT to ask correctly
             token = await sap_client.get_token()
@@ -525,7 +589,7 @@ class ChatService:
                 elif isinstance(price_text, (float, int)):
                     price_text = f"{price_text:.2f}€"
                 
-                email_sent = email_service.send_offer_email(
+                email_sent = await email_service.send_offer_email(
                     to_email=email,
                     offer_id=offer_id,
                     product_name=product_name,
