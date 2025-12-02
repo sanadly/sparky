@@ -124,12 +124,12 @@ class SAPClient:
                 logger.error(f"Error simulating price (POST): {e2}")
                 return None
 
-    def create_offer(self, token: str, product_id: str, start_date: str, consumption_r1: float, consumption_r2: str = "", user_details: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    def create_offer(self, token: str, product_id: str, start_date: str, consumption_r1: float, consumption_r2: str = "", user_details: Optional[Dict[str, Any]] = None) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
         """
-        Creates an offer.
+        Creates an offer. Returns (offer_data, error_message).
         """
         if token == "mock_token":
-            return {"offer_id": "OFFER-998877"}
+            return {"offer_id": "OFFER-998877"}, None
 
         group_name = settings.SAP_OFFER_GROUP 
         
@@ -140,9 +140,19 @@ class SAPClient:
             "Produkt": str(product_id)
         }
         
-        # Payload only requires STARTDATE in YYYY-MM-DD format
+        # Use user_id as PartnerID if available, otherwise a default or empty
+        partner_id = user_details.get("user_id", "") if user_details else ""
+
+        # Ensure ConsumptionR2 is "0" if empty, as SAP requires a number
+        if not consumption_r2:
+            consumption_r2 = "0"
+
         payload = {
-            "STARTDATE": str(start_date)
+            "STARTDATE": f"{start_date}",
+            "ConsumptionR1": str(consumption_r1),
+            "ConsumptionR2": str(consumption_r2),
+            "ProductID": str(product_id),
+            "PartnerID": str(partner_id)
         }
         
         logger.info(f"🚀 CREATE OFFER PAYLOAD: {payload}")
@@ -150,12 +160,19 @@ class SAPClient:
         try:
             response = requests.post(settings.OFFER_URL, headers=headers, json=payload)
             response.raise_for_status()
-            return response.json()
+            return response.json(), None
         except Exception as e:
             logger.error(f"Error creating offer: {e}")
+            error_msg = "Unbekannter Fehler"
             if hasattr(e, 'response') and e.response is not None:
                  logger.error(f"SAP Error Response Body: {e.response.text}")
-            return None
+                 try:
+                     # Try to extract message from SAP error
+                     error_data = e.response.json()
+                     error_msg = error_data.get("error", {}).get("message", {}).get("value", e.response.text)
+                 except:
+                     error_msg = e.response.text
+            return None, error_msg
 
 # Singleton instance
 sap_client = SAPClient()
