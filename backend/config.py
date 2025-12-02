@@ -18,6 +18,14 @@ class Settings(BaseSettings):
     GEMINI_API_KEY_2: str = ""
     GEMINI_MODEL: str = "models/gemini-flash-latest"
     
+    # DeepSeek Configuration
+    DEEPSEEK_API_KEY: str = ""
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
+    DEEPSEEK_MODEL: str = "deepseek-chat"
+    
+    # LLM Provider (gemini or deepseek)
+    LLM_PROVIDER: str = "gemini"
+    
     # Application Configuration
     LOG_LEVEL: str = "INFO"
     
