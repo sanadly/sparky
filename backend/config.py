@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     OFFER_URL: str = "https://intense-ag-development.it-cpi018-rt.cfapps.eu10-003.hana.ondemand.com/http/v1/servicecloud/create/offer"
     
     # Gemini Configuration
-    GEMINI_API_KEY: str = ""
+    GEMINI_API_KEY: str = "AIzaSyCiB2LGBqjtm3v_0UUOsBDhmCP2gLvx2kk"
     GEMINI_API_KEY_2: str = ""
     GEMINI_MODEL: str = "models/gemini-flash-latest"
     

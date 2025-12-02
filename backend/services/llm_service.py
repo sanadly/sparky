@@ -62,7 +62,12 @@ class LLMService:
             response = self.model.generate_content(full_prompt)
             return response.text.strip()
         except Exception as e:
-            logger.error(f"Gemini API Error: {e}")
+            error_msg = str(e)
+            logger.error(f"Gemini API Error: {error_msg}")
+            
+            if "429" in error_msg:
+                return "Entschuldigung, ich bin gerade etwas überlastet (zu viele Anfragen). Bitte versuche es in einer Minute noch einmal. ⏳"
+                
             return "Entschuldigung, ich hatte kurz technische Probleme. Kannst du das bitte wiederholen?"
 
     def extract_entities(self, text):

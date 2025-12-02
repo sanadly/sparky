@@ -18,38 +18,11 @@ from .services.chat_service import chat_service, email_service
 setup_logging()
 logger = logging.getLogger(__name__)
 
-async def poll_emails():
-    while True:
-        try:
-            logger.info("📧 Polling for new emails...")
-            new_emails = await asyncio.to_thread(email_service.check_new_emails)
-            
-            for email in new_emails:
-                sender = email["sender"]
-                subject = email["subject"]
-                body = email["body"]
-                
-                logger.info(f"📩 Processing email from {sender}: {subject}")
-                
-                # Use ChatService to handle the email content as a message
-                # This enables stateful conversation (Consumption -> Date -> Offer)
-                response = await chat_service.handle_message(sender, body)
-                reply_text = response.get("reply")
-                
-                if reply_text:
-                    # Send Reply
-                    email_service.send_email(sender, f"Re: {subject}", reply_text)
-                
-        except Exception as e:
-            logger.error(f"Error in email polling loop: {e}")
-            
-        await asyncio.sleep(30) # Poll every 30 seconds
-
 # FastAPI App
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     asyncio.create_task(session_manager.cleanup_loop())
-    asyncio.create_task(poll_emails())
+    asyncio.create_task(email_service.run_email_polling(chat_service))
     yield
 
 app = FastAPI(lifespan=lifespan)

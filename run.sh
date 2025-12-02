@@ -33,6 +33,10 @@ echo -e "${YELLOW}🧹 Cleaning up ports 8000 and 3000...${NC}"
 kill_port 8000
 kill_port 3000
 
+# 1.1 Kill any existing python telegram bot processes
+echo -e "${YELLOW}🧹 Cleaning up old bot processes...${NC}"
+pkill -f "telegram_bot" || true
+
 # 2. Check for venv
 if [ ! -d "venv" ]; then
     echo -e "${RED}❌ Virtual environment not found! Please run setup first.${NC}"

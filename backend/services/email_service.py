@@ -5,6 +5,7 @@ from email.header import decode_header
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import logging
+import asyncio
 from ..config import settings
 
 logger = logging.getLogger(__name__)
@@ -200,3 +201,36 @@ class EmailService:
         except Exception as e:
             logger.error(f"❌ Error checking emails: {e}")
             return []
+
+    async def run_email_polling(self, chat_service_instance):
+        """
+        Runs the email polling loop.
+        """
+        while True:
+            try:
+                logger.info("📧 Polling for new emails...")
+                new_emails = await asyncio.to_thread(self.check_new_emails)
+                
+                for email in new_emails:
+                    sender = email["sender"]
+                    subject = email["subject"]
+                    body = email["body"]
+                    
+                    logger.info(f"📩 Processing email from {sender}: {subject}")
+                    
+                    # Use ChatService to handle the email content as a message
+                    response = await chat_service_instance.handle_message(sender, body)
+                    reply_text = response.get("reply")
+                    
+                    if reply_text:
+                        # Send Reply
+                        self.send_email(sender, f"Re: {subject}", reply_text)
+                    
+            except Exception as e:
+                error_msg = str(e)
+                if "Operation timed out" in error_msg or "60" in error_msg:
+                    logger.warning(f"⚠️ Email Polling Timeout: Connection to IMAP server timed out. Retrying...")
+                else:
+                    logger.error(f"Error in email polling loop: {e}")
+                
+            await asyncio.sleep(30) # Poll every 30 seconds
