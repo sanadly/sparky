@@ -38,7 +38,11 @@ class EmailService:
         Jahresverbrauch: {consumption} kWh
         Geschätzter Preis: {price}
         
-        Um das Angebot anzunehmen, antworte einfach auf diese E-Mail oder kontaktiere uns telefonisch.
+        Um das Angebot anzunehmen, klicke bitte hier:
+        https://intense-energy.de/accept-offer?id={offer_id}
+        (Dies wandelt das Angebot in einen Vertrag um)
+        
+        Oder antworte einfach auf diese E-Mail.
         
         Viele Grüße,
         Dein Intense Energy Team
@@ -91,7 +95,13 @@ class EmailService:
               </div>
               
               <p style="text-align: center; margin-top: 20px;">
-                Um das Angebot anzunehmen, antworte einfach auf diese E-Mail.
+                Um das Angebot anzunehmen, klicke bitte auf den folgenden Button:
+              </p>
+              
+              <a href="https://intense-energy.de/accept-offer?id={offer_id}" class="cta">JETZT ANGEBOT ANNEHMEN</a>
+              
+              <p style="text-align: center; font-size: 0.9em; color: #555;">
+                (Hinweis: Dies ist ein simulierter Link. In einem echten System würde dieser Klick das Angebot ID {offer_id} an einen SAP-Endpunkt senden, um es in einen verbindlichen Vertrag umzuwandeln.)
               </p>
               
               <div class="footer">

@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     DEEPSEEK_MODEL: str = "deepseek-chat"
     
     # LLM Provider (gemini or deepseek)
-    LLM_PROVIDER: str = "gemini"
+    LLM_PROVIDER: str = "deepseek"
     
     # Application Configuration
     LOG_LEVEL: str = "INFO"
@@ -55,5 +55,9 @@ class Settings(BaseSettings):
             self.MOCK_SAP = True
         if not self.GEMINI_API_KEY or self.GEMINI_API_KEY == "your_gemini_api_key":
             self.MOCK_LLM = True
+            
+        # Alias for DeepSeek API Key (User request)
+        if not self.DEEPSEEK_API_KEY and os.environ.get("DEEPSEEK_API"):
+            self.DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API")
 
 settings = Settings()

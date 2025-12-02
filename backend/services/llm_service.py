@@ -139,8 +139,9 @@ class LLMService:
             
             1. intent (String):
                - "selection": User wählt ein Produkt oder nennt Daten (Verbrauch, Datum).
+               - "show_products": User möchte Tarife/Produkte sehen (z.B. "Zeig mir Tarife", "Angebot", "Ja").
                - "recommendation": User fragt nach Empfehlung/Hilfe.
-               - "question": User stellt eine allgemeine Frage.
+               - "question": User stellt eine allgemeine Frage (z.B. "Was kannst du?").
                - "correction": User korrigiert eine vorherige Eingabe.
                - "confirmation": User stimmt zu.
                - "rejection": User lehnt ab.

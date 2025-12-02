@@ -167,15 +167,17 @@ class ChatService:
         return {"reply": llm_service.generate_answer(text)}
 
     async def _handle_start(self, session, text_lower, text):
-        # 1. Explicit request for products OR Affirmation (User says "Ja" to "Möchtest du Tarife sehen?")
-        if any(x in text_lower for x in ["tarif", "produkte", "angebot", "zeig", "ja", "gerne", "ok", "sicher", "klar", "mach"]):
+        # 1. Analyze Intent with LLM
+        entities = llm_service.extract_entities(text)
+        intent = entities.get("intent", "unknown")
+        logger.info(f"🧠 Start Handler Intent: {intent}, Entities: {entities}")
+
+        # 2. Handle "Show Products" Intent
+        if intent == "show_products" or (intent == "confirmation" and any(x in text_lower for x in ["ja", "gerne", "ok"])):
             token = await sap_client.get_token()
             products = await sap_client.get_products(token)
             if not products:
                 return {"reply": "Entschuldigung, mein Tarifrechner macht gerade Pause. Bitte versuche es später."}
-            
-            product_lines = [f"- {p.get('bezeichnung') or p.get('name', 'Unbekannt')}" for p in products]
-            product_list = "\n".join(product_lines)
             
             session["state"] = STATE_WAITING_FOR_DURATION
             session["data"]["products"] = products
@@ -186,32 +188,23 @@ class ChatService:
                 "ui_data": {"type": "duration_selection"} 
             }
 
-        # 2. Simple Greeting
-        elif any(x in text_lower for x in ["hallo", "hi", "hey", "start"]):
-             return {
-                 "reply": "**Hallo!** 👋 Ich bin **Sparky**, dein Energieberater der INTENSE AG.\n\nMöchtest du unsere Tarife sehen, eine Simulation starten oder hast du eine Frage?",
-                 "state": STATE_START,
-                 "quick_replies": ["Tarife anzeigen", "Simulation starten", "Was kannst du?"]
-             }
-            
-        # 3. Simulation Request
-        elif any(x in text_lower for x in ["simulat", "berechnen", "rechnen", "kosten"]):
-             session["state"] = STATE_WAITING_FOR_CONSUMPTION
-             return {
-                 "reply": "Gerne! Für eine genaue Simulation benötige ich deinen Jahresverbrauch.",
-                 "state": STATE_WAITING_FOR_CONSUMPTION,
-                 "ui_data": {"type": "consumption_input"}
-             }
-        # 4. Check for Consumption (Implicit Simulation Start)
-        entities = llm_service.extract_entities(text)
-        if "consumption" in entities:
+        # 3. Handle Consumption / Simulation Intent
+        if "consumption" in entities or intent == "selection":
              session["state"] = STATE_WAITING_FOR_CONSUMPTION
              # Pass to _handle_consumption to process the data immediately
              return await self._handle_consumption(session, text)
 
-        else:
-            context = {"state": "start", "instruction": "Du bist ein Energieberater. Beantworte die Frage kurz und frage dann: 'Möchtest du unsere Tarife sehen?'"}
-            return {"reply": llm_service.generate_answer(text, context)}
+        # 4. Handle General Questions / Greetings
+        # Fallback to LLM answer if it's a question or recommendation request
+        if intent in ["question", "recommendation"] or any(x in text_lower for x in ["was", "wie", "wer", "hallo", "hi"]):
+             context = {"state": "start", "instruction": "Du bist ein Energieberater. Beantworte die Frage kurz und frage dann: 'Möchtest du unsere Tarife sehen?'"}
+             return {"reply": llm_service.generate_answer(text, context)}
+
+        # 5. Fallback for completely unknown inputs
+        return {
+             "reply": "Das habe ich nicht ganz verstanden. Möchtest du unsere Tarife sehen? (Antworte mit Ja)",
+             "state": STATE_START
+        }
 
     async def _handle_consumption(self, session, text):
         # 0. Check for Direct Product Match first (User might have ignored consumption question and selected product)
@@ -301,7 +294,7 @@ class ChatService:
             return {
                 "reply": f"Verstanden, {entities['consumption']} kWh. Welchen der Tarife möchtest du wählen?",
                 "state": STATE_WAITING_FOR_PRODUCT_CHOICE,
-                "ui_data": self._get_product_ui_data(session["data"].get("products", []))
+                "ui_data": await self._get_product_ui_data(session["data"].get("products", []), consumption=entities['consumption'])
             }
         
         elif "consumption_r1" in entities and "consumption_r2" in entities:
@@ -316,7 +309,7 @@ class ChatService:
             return {
                 "reply": f"Verstanden, {entities['consumption_r1']} kWh (HT) und {entities['consumption_r2']} kWh (NT). Welchen der Tarife möchtest du wählen?",
                 "state": STATE_WAITING_FOR_PRODUCT_CHOICE,
-                "ui_data": self._get_product_ui_data(session["data"].get("products", []))
+                "ui_data": await self._get_product_ui_data(session["data"].get("products", []), consumption=int(entities['consumption_r1']) + int(entities['consumption_r2']))
             }
         
         # User selected a product but didn't give consumption yet (LLM fallback)
@@ -372,7 +365,7 @@ class ChatService:
             data["consumption"] = extraction["consumption"]
             return {
                 "reply": f"Okay, ich korrigiere den Verbrauch auf {data['consumption']} kWh. Welchen Tarif möchtest du wählen?",
-                "ui_data": self._get_product_ui_data(data.get("products", []))
+                "ui_data": await self._get_product_ui_data(data.get("products", []), consumption=data['consumption'])
             }
             
         elif "product_name" in extraction:
@@ -410,7 +403,7 @@ class ChatService:
         if any(x in text.lower() for x in ["tarif", "zeig", "liste", "angebot", "welche"]):
              return {
                 "reply": "Hier sind unsere verfügbaren Tarife. Welchen möchtest du wählen?",
-                "ui_data": self._get_product_ui_data(data.get("products", []))
+                "ui_data": await self._get_product_ui_data(data.get("products", []), consumption=data.get("consumption"))
             }
 
         return {"reply": "Das habe ich nicht verstanden. Welchen Tarif möchtest du wählen? (Oder frag mich nach einer Empfehlung!)"}
@@ -526,16 +519,18 @@ class ChatService:
                 product_name = session["data"].get("product_name", "Stromtarif")
                 
                 # Send Email
-                price_text = "auf Anfrage" # We need to recalculate or store price? 
-                # For now let's just use a generic message or try to get price from session if stored
-                # Ideally we should have stored the simulated price in session["data"]
+                price_text = session["data"].get("simulated_price")
+                if not price_text:
+                    price_text = "auf Anfrage"
+                elif isinstance(price_text, (float, int)):
+                    price_text = f"{price_text:.2f}€"
                 
                 email_sent = email_service.send_offer_email(
                     to_email=email,
                     offer_id=offer_id,
                     product_name=product_name,
                     consumption=str(consumption),
-                    price=price_text # TODO: Pass real price
+                    price=price_text
                 )
 
                 # Reset session after successful offer
@@ -601,7 +596,9 @@ class ChatService:
                 "ui_data": {"type": "tariff_type_selection"}
             }
         
-        return {"reply": "Das habe ich nicht verstanden. Bitte wähle 12, 24 oder egal."}
+        # Fallback to LLM for questions
+        context = {"state": "waiting_for_duration", "instruction": "Der User soll eine Laufzeit (12/24 Monate) wählen. Beantworte seine Frage und erinnere ihn dann an die Auswahl."}
+        return {"reply": llm_service.generate_answer(text, context)}
 
     async def _handle_tariff_type(self, session, text):
         text_lower = text.lower()
@@ -655,10 +652,14 @@ class ChatService:
             return {
                 "reply": f"Hier sind die passenden Tarife:\n\n{product_list}\n\nWelchen möchtest du wählen? (Oder nenne mir deinen Verbrauch für eine Berechnung)",
                 "state": STATE_WAITING_FOR_PRODUCT_CHOICE, # Changed to choice to allow selection
-                "ui_data": {"type": "product_selection", "products": self._get_product_ui_data(filtered_products)["products"]}
+                "reply": f"Hier sind die passenden Tarife:\n\n{product_list}\n\nWelchen möchtest du wählen? (Oder nenne mir deinen Verbrauch für eine Berechnung)",
+                "state": STATE_WAITING_FOR_PRODUCT_CHOICE, # Changed to choice to allow selection
+                "ui_data": {"type": "product_selection", "products": (await self._get_product_ui_data(filtered_products, consumption=session["data"].get("consumption")))["products"]}
             }
             
-        return {"reply": "Das habe ich nicht verstanden. Bitte wähle Einzel, Doppel oder egal."}
+        # Fallback to LLM for questions
+        context = {"state": "waiting_for_tariff_type", "instruction": "Der User soll einen Tariftyp (Einzel/Doppel) wählen. Beantworte seine Frage und erinnere ihn dann an die Auswahl."}
+        return {"reply": llm_service.generate_answer(text, context)}
 
     def _get_consumption_split(self, product, total_consumption):
         """
@@ -806,7 +807,14 @@ class ChatService:
                 price = round(bp + (float(data["consumption"]) * wp), 2)
             except Exception as e:
                 logger.warning(f"Fallback price calculation failed: {e}")
+                price = round(bp + (float(data["consumption"]) * wp), 2)
+            except Exception as e:
+                logger.warning(f"Fallback price calculation failed: {e}")
                 price = None
+        
+        # Store price for offer creation later
+        if price is not None:
+            data["simulated_price"] = price
 
         price_text = f"{price:.2f}€" if price is not None else "auf Anfrage"
         
@@ -819,14 +827,22 @@ class ChatService:
             }
         }
 
-    def _get_product_ui_data(self, products):
+    async def _get_product_ui_data(self, products, consumption=None):
         products_data = []
-        token = sap_client.get_token()
+        token = await sap_client.get_token()
         
-        logger.info(f"🎯 PROCESSING {len(products)} PRODUCTS FOR UI")
+        # Use provided consumption or default to 2500
+        sim_consumption = 2500
+        if consumption:
+            try:
+                sim_consumption = float(consumption)
+            except ValueError:
+                pass
+        
+        logger.info(f"🎯 PROCESSING {len(products)} PRODUCTS FOR UI (Consumption: {sim_consumption})")
         
         for p in products:
-             # Simulate price for 2500 kWh to get an estimate
+             # Simulate price
              product_id = p.get("produktId")
              base_price = 0.0
              working_price = 0.0
@@ -835,10 +851,10 @@ class ChatService:
              logger.info(f"🔍 Processing product: {p.get('bezeichnung')} (ID: {product_id})")
              
              if product_id:
-                 # Determine consumption split for simulation (2500 kWh default)
-                 sim_consumption_r1, sim_consumption_r2 = self._get_consumption_split(p, 2500)
+                 # Determine consumption split
+                 sim_consumption_r1, sim_consumption_r2 = self._get_consumption_split(p, sim_consumption)
                  
-                 sim = sap_client.simulate_price(token, sim_consumption_r1, product_id, sim_consumption_r2)
+                 sim = await sap_client.simulate_price(token, sim_consumption_r1, product_id, sim_consumption_r2)
                  if sim:
                      logger.info(f"✅ Simulation result keys: {sim.keys()}")
                      # Extract total from BillSimulation wrapper
@@ -861,9 +877,7 @@ class ChatService:
                  "id": p.get("produktId"),
                  "name": p.get("bezeichnung") or p.get("name"),
                  "description": p.get("beschreibung", ""),
-                 "description": p.get("beschreibung", ""),
                  "isGreen": any(x in (p.get("bezeichnung") or "").lower() for x in ["oeko", "öko", "green", "day & night", "day and night"]) or p.get("oeko", False),
-                 "basePrice": base_price,
                  "basePrice": base_price,
                  "workingPrice": working_price,
                  "totalPrice": total_price,

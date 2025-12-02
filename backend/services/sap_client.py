@@ -111,22 +111,15 @@ class SAPClient:
         
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.get(settings.SIMULATION_URL, headers=headers, json=payload, timeout=10.0)
+                # SAP Simulation requires POST with body, even if it's a "simulation" (read-only)
+                response = await client.post(settings.SIMULATION_URL, headers=headers, json=payload, timeout=10.0)
                 response.raise_for_status()
                 sim_result = response.json()
-                logger.info(f"💰 RAW SIMULATION RESPONSE (GET): {sim_result}")
+                logger.info(f"💰 RAW SIMULATION RESPONSE: {sim_result}")
                 return sim_result
             except Exception as e:
-                logger.warning(f"GET Simulation failed: {e}. Trying POST...")
-                try:
-                    response = await client.post(settings.SIMULATION_URL, headers=headers, json=payload, timeout=10.0)
-                    response.raise_for_status()
-                    sim_result = response.json()
-                    logger.info(f"💰 RAW SIMULATION RESPONSE (POST): {sim_result}")
-                    return sim_result
-                except Exception as e2:
-                    logger.error(f"Error simulating price (POST): {e2}")
-                    return None
+                logger.error(f"Error simulating price: {e}")
+                return None
 
     async def create_offer(self, token: str, product_id: str, start_date: str, consumption_r1: float, consumption_r2: str = "", user_details: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         """
