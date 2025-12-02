@@ -38,11 +38,7 @@ class EmailService:
         Jahresverbrauch: {consumption} kWh
         Geschätzter Preis: {price}
         
-        Um das Angebot anzunehmen, klicke bitte hier:
-        https://intense-energy.de/accept-offer?id={offer_id}
-        (Dies wandelt das Angebot in einen Vertrag um)
-        
-        Oder antworte einfach auf diese E-Mail.
+        Antworte einfach auf diese E-Mail, wenn du Fragen hast.
         
         Viele Grüße,
         Dein Intense Energy Team
@@ -53,16 +49,19 @@ class EmailService:
         <html>
           <head>
             <style>
-              body {{ font-family: Arial, sans-serif; color: #333; line-height: 1.6; }}
-              .container {{ max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px; background-color: #f9f9f9; }}
-              .header {{ text-align: center; padding-bottom: 20px; border-bottom: 2px solid #007bff; margin-bottom: 20px; }}
-              .header h1 {{ color: #007bff; margin: 0; }}
-              .offer-card {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
-              .offer-item {{ margin-bottom: 10px; }}
-              .offer-label {{ font-weight: bold; color: #555; }}
-              .offer-value {{ font-size: 1.1em; color: #000; }}
-              .footer {{ text-align: center; font-size: 0.8em; color: #777; margin-top: 30px; border-top: 1px solid #ddd; padding-top: 10px; }}
-              .cta {{ display: block; width: fit-content; margin: 20px auto; padding: 10px 20px; background-color: #28a745; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; }}
+              body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #e6f1ff; line-height: 1.6; background-color: #0a192f; margin: 0; padding: 0; }}
+              .container {{ max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #233554; border-radius: 10px; background-color: #112240; }}
+              .header {{ text-align: center; padding-bottom: 20px; border-bottom: 2px solid #64ffda; margin-bottom: 20px; }}
+              .header h1 {{ color: #64ffda; margin: 0; font-size: 24px; }}
+              .header p {{ color: #8892b0; margin: 5px 0 0; }}
+              .offer-card {{ background: #233554; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }}
+              .offer-item {{ margin-bottom: 15px; border-bottom: 1px solid #112240; padding-bottom: 10px; }}
+              .offer-item:last-child {{ border-bottom: none; margin-bottom: 0; padding-bottom: 0; }}
+              .offer-label {{ font-weight: bold; color: #8892b0; font-size: 0.9em; text-transform: uppercase; letter-spacing: 0.05em; }}
+              .offer-value {{ font-size: 1.1em; color: #e6f1ff; margin-top: 5px; }}
+              .price-value {{ color: #64ffda; font-weight: bold; font-size: 1.3em; }}
+              .footer {{ text-align: center; font-size: 0.8em; color: #8892b0; margin-top: 30px; border-top: 1px solid #233554; padding-top: 20px; }}
+              a {{ color: #64ffda; text-decoration: none; }}
             </style>
           </head>
           <body>
@@ -90,18 +89,12 @@ class EmailService:
                 </div>
                 <div class="offer-item">
                   <div class="offer-label">Geschätzter Preis</div>
-                  <div class="offer-value" style="color: #28a745; font-weight: bold;">{price}</div>
+                  <div class="offer-value price-value">{price}</div>
                 </div>
               </div>
               
-              <p style="text-align: center; margin-top: 20px;">
-                Um das Angebot anzunehmen, klicke bitte auf den folgenden Button:
-              </p>
-              
-              <a href="https://intense-energy.de/accept-offer?id={offer_id}" class="cta">JETZT ANGEBOT ANNEHMEN</a>
-              
-              <p style="text-align: center; font-size: 0.9em; color: #555;">
-                (Hinweis: Dies ist ein simulierter Link. In einem echten System würde dieser Klick das Angebot ID {offer_id} an einen SAP-Endpunkt senden, um es in einen verbindlichen Vertrag umzuwandeln.)
+              <p style="text-align: center; margin-top: 30px; color: #8892b0;">
+                Antworte einfach auf diese E-Mail, wenn du Fragen hast oder das Angebot annehmen möchtest.
               </p>
               
               <div class="footer">
