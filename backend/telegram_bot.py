@@ -84,6 +84,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
             
+            elif ui_type == "duration_selection":
+                keyboard = [
+                    [InlineKeyboardButton("12 Monate", callback_data="dur:12"), InlineKeyboardButton("24 Monate", callback_data="dur:24")],
+                    [InlineKeyboardButton("Egal", callback_data="dur:egal")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+            elif ui_type == "tariff_type_selection":
+                keyboard = [
+                    [InlineKeyboardButton("Einzeltarif", callback_data="tar:single"), InlineKeyboardButton("Doppeltarif", callback_data="tar:double")],
+                    [InlineKeyboardButton("Egal", callback_data="tar:egal")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
             elif ui_type == "offer_success":
                 # Optional: Add button to restart
                 keyboard = [[InlineKeyboardButton("Neuer Start", callback_data="cmd:restart")]]
@@ -130,6 +144,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message_to_send = "Verbrauch ändern"
         elif cmd == "restart":
             message_to_send = "Start"
+    
+    elif data.startswith("dur:"):
+        duration = data.split(":", 1)[1]
+        message_to_send = duration
+        
+    elif data.startswith("tar:"):
+        tariff = data.split(":", 1)[1]
+        message_to_send = tariff
             
     if message_to_send:
         # Send "Typing..." action
@@ -185,6 +207,20 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ]
                     reply_markup = InlineKeyboardMarkup(keyboard)
                 
+                elif ui_type == "duration_selection":
+                    keyboard = [
+                        [InlineKeyboardButton("12 Monate", callback_data="dur:12"), InlineKeyboardButton("24 Monate", callback_data="dur:24")],
+                        [InlineKeyboardButton("Egal", callback_data="dur:egal")]
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+
+                elif ui_type == "tariff_type_selection":
+                    keyboard = [
+                        [InlineKeyboardButton("Einzeltarif", callback_data="tar:single"), InlineKeyboardButton("Doppeltarif", callback_data="tar:double")],
+                        [InlineKeyboardButton("Egal", callback_data="tar:egal")]
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+
                 elif ui_type == "offer_success":
                     keyboard = [[InlineKeyboardButton("Neuer Start", callback_data="cmd:restart")]]
                     reply_markup = InlineKeyboardMarkup(keyboard)

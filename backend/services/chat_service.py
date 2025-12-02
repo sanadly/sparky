@@ -12,7 +12,9 @@ from ..session_manager import (
     STATE_WAITING_FOR_PRODUCT_CHOICE,
     STATE_SIMULATION_DONE,
     STATE_WAITING_FOR_DATE,
-    STATE_OFFER_CREATED
+    STATE_OFFER_CREATED,
+    STATE_WAITING_FOR_DURATION,
+    STATE_WAITING_FOR_TARIFF_TYPE
 )
 
 logger = logging.getLogger(__name__)
@@ -128,6 +130,10 @@ class ChatService:
             return await self._handle_date(session, text, user_id)
         elif state == STATE_OFFER_CREATED:
             return await self._handle_offer_created(session, text)
+        elif state == STATE_WAITING_FOR_DURATION:
+            return await self._handle_duration(session, text)
+        elif state == STATE_WAITING_FOR_TARIFF_TYPE:
+            return await self._handle_tariff_type(session, text)
         
         # Fallback
         return {"reply": llm_service.generate_answer(text)}
@@ -143,13 +149,13 @@ class ChatService:
             product_lines = [f"- {p.get('bezeichnung') or p.get('name', 'Unbekannt')}" for p in products]
             product_list = "\n".join(product_lines)
             
-            session["state"] = STATE_WAITING_FOR_CONSUMPTION
+            session["state"] = STATE_WAITING_FOR_DURATION
             session["data"]["products"] = products
             
             return {
-                "reply": f"Hier sind unsere aktuellen Tarife:\n\n{product_list}\n\nHast du Fragen dazu oder soll ich direkt die Kosten für dich berechnen? (Dafür bräuchte ich deinen Jahresverbrauch)",
-                "state": STATE_WAITING_FOR_CONSUMPTION,
-                "ui_data": {"type": "product_selection", "products": self._get_product_ui_data(products)["products"]} 
+                "reply": "Gerne! Für welche Laufzeit interessierst du dich? (12 Monate, 24 Monate oder egal)",
+                "state": STATE_WAITING_FOR_DURATION,
+                "ui_data": {"type": "duration_selection"} 
             }
 
         # 2. Simple Greeting
@@ -359,7 +365,7 @@ class ChatService:
                 
                 consumption_r1, consumption_r2 = self._get_consumption_split(full_product, consumption)
 
-                offer = sap_client.create_offer(token, product_id, start_date, consumption_r1, consumption_r2, {"user_id": user_id})
+                offer, error_msg = sap_client.create_offer(token, product_id, start_date, consumption_r1, consumption_r2, {"user_id": user_id})
                 if offer:
                     # Extract ID logic
                     offer_data = offer
@@ -393,7 +399,7 @@ class ChatService:
                         }
                     }
                 else:
-                    return {"reply": "Fehler bei der Angebotserstellung. Bitte versuche es später."}
+                    return {"reply": f"Fehler bei der Angebotserstellung: {error_msg or 'Bitte versuche es später.'}"}
             except ValueError:
                  return {"reply": "Ungültiges Datumsformat. Bitte nutze TT.MM.JJJJ."}
         
@@ -417,6 +423,85 @@ class ChatService:
 
         context = {"state": "offer_created", "offer_id": session["data"].get("last_offer_id")}
         return {"reply": llm_service.generate_answer(text, context)}
+
+    async def _handle_duration(self, session, text):
+        text_lower = text.lower()
+        duration = None
+        
+        if "12" in text_lower:
+            duration = 12
+        elif "24" in text_lower:
+            duration = 24
+        elif any(x in text_lower for x in ["egal", "alle", "beide"]):
+            duration = "egal"
+            
+        if duration:
+            session["data"]["filter_duration"] = duration
+            session["state"] = STATE_WAITING_FOR_TARIFF_TYPE
+            return {
+                "reply": "Alles klar. Benötigst du einen Einzel- oder Doppeltarif? (Einzel, Doppel oder egal)",
+                "state": STATE_WAITING_FOR_TARIFF_TYPE,
+                "ui_data": {"type": "tariff_type_selection"}
+            }
+        
+        return {"reply": "Das habe ich nicht verstanden. Bitte wähle 12, 24 oder egal."}
+
+    async def _handle_tariff_type(self, session, text):
+        text_lower = text.lower()
+        tariff_type = None
+        
+        if any(x in text_lower for x in ["einzel", "single", "standard"]):
+            tariff_type = "single"
+        elif any(x in text_lower for x in ["doppel", "double", "ht/nt", "ht", "nt"]):
+            tariff_type = "double"
+        elif any(x in text_lower for x in ["egal", "alle", "beide"]):
+            tariff_type = "egal"
+            
+        if tariff_type:
+            session["data"]["filter_tariff_type"] = tariff_type
+            
+            # Filter products
+            all_products = session["data"].get("products", [])
+            filtered_products = []
+            
+            filter_duration = session["data"].get("filter_duration")
+            
+            for p in all_products:
+                # Duration Filter
+                if filter_duration != "egal":
+                    if int(p.get("laufzeit", 12)) != int(filter_duration):
+                        continue
+                
+                # Tariff Type Filter
+                if tariff_type != "egal":
+                    is_double = p.get('etDt') == 'DT' or p.get('preisNT') is not None
+                    if tariff_type == "single" and is_double:
+                        continue
+                    if tariff_type == "double" and not is_double:
+                        continue
+                        
+                filtered_products.append(p)
+            
+            if not filtered_products:
+                 return {
+                    "reply": "Leider habe ich keine passenden Tarife gefunden. Möchtest du alle Tarife sehen?",
+                    "state": STATE_WAITING_FOR_DURATION, # Or back to start?
+                    "ui_data": {"type": "duration_selection"} # Let them try again
+                }
+
+            session["state"] = STATE_WAITING_FOR_CONSUMPTION # Or product choice directly?
+            # Let's show products and ask for consumption if they select one, or ask for consumption generally
+            
+            product_lines = [f"- {p.get('bezeichnung') or p.get('name', 'Unbekannt')}" for p in filtered_products]
+            product_list = "\n".join(product_lines)
+            
+            return {
+                "reply": f"Hier sind die passenden Tarife:\n\n{product_list}\n\nWelchen möchtest du wählen? (Oder nenne mir deinen Verbrauch für eine Berechnung)",
+                "state": STATE_WAITING_FOR_PRODUCT_CHOICE, # Changed to choice to allow selection
+                "ui_data": {"type": "product_selection", "products": self._get_product_ui_data(filtered_products)["products"]}
+            }
+            
+        return {"reply": "Das habe ich nicht verstanden. Bitte wähle Einzel, Doppel oder egal."}
 
     def _get_consumption_split(self, product, total_consumption):
         """
@@ -443,6 +528,16 @@ class ChatService:
 
     async def _run_simulation(self, session):
         data = session["data"]
+        
+        # Guard: If we don't have consumption yet, ask for it
+        if "consumption" not in data:
+             session["state"] = STATE_WAITING_FOR_CONSUMPTION
+             return {
+                 "reply": "Gerne! Für eine genaue Simulation benötige ich deinen Jahresverbrauch in kWh.",
+                 "state": STATE_WAITING_FOR_CONSUMPTION,
+                 "ui_data": {"type": "consumption_input"}
+             }
+
         token = sap_client.get_token()
         products = sap_client.get_products(token)
         
