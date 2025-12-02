@@ -106,7 +106,10 @@ class LLMService:
                     
                 result = json.loads(cleaned_text)
             except Exception as e:
-                logger.error(f"LLM Extraction Error: {e}")
+                if "429" in str(e):
+                    logger.warning(f"⚠️ Gemini Quota Exceeded (429). Falling back to Regex.")
+                else:
+                    logger.error(f"LLM Extraction Error: {e}")
                 pass
 
         # Fallback Logic (Always runs if key missing or LLM disabled)
