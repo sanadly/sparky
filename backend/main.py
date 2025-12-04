@@ -6,7 +6,8 @@ from contextlib import asynccontextmanager
 import logging
 import asyncio
 import os
-
+import redis
+import json
 # Import refactored modules
 from .config import settings
 from .logger import setup_logging
@@ -76,19 +77,38 @@ async def chat_endpoint(msg: UserMessage):
     }
 
 # Pitch Cache to speed up demo
-PITCH_CACHE = {
+# Redis Connection
+try:
+    redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+except Exception as e:
+    logger.warning(f"Redis connection failed: {e}. Caching disabled.")
+    redis_client = None
+
+# Initial Cache Population (if Redis is empty)
+INITIAL_PITCHES = {
     "INTENSIVE 12 Demo-Produkt": "Der **INTENSIVE 12** Mix-Tarif bietet dir 12 Monate Top-Sicherheit und einen ausgewogenen Energiemix!",
     "INTENSIVE 24 Demo-Produkt": "Hey! Der **INTENSIVE 24 Mix** bietet dir maximale **Planungssicherheit** und faire Konditionen für zwei Jahre. ⚡",
     "INTENSIVE Day & Night Demo-Produkt": "**Tag- und Nachtstrom** intelligent kombiniert für dich! ⚡ Das gibt dir maximale **Flexibilität**.",
     "INTENSIVE Day & Night Demo-Produkt 24": "**Tag & Nacht** sparen: Der perfekte Mix für deinen Bedarf! ⚡"
 }
 
+if redis_client:
+    try:
+        for key, value in INITIAL_PITCHES.items():
+            if not redis_client.exists(f"pitch:{key}"):
+                redis_client.set(f"pitch:{key}", value)
+    except Exception as e:
+        logger.error(f"Failed to populate Redis cache: {e}")
+
 @app.post("/api/pitch", dependencies=[Security(verify_api_key)])
 async def pitch_endpoint(req: PitchRequest):
     try:
-        # Check Cache first
-        if req.product_name in PITCH_CACHE:
-            return {"pitch": PITCH_CACHE[req.product_name]}
+        # Check Redis Cache
+        cache_key = f"pitch:{req.product_name}"
+        if redis_client:
+            cached_pitch = redis_client.get(cache_key)
+            if cached_pitch:
+                return {"pitch": cached_pitch}
             
         if req.consumption == 0:
             prompt = f"Produkt: {req.product_name}, Typ: {'Öko' if req.is_green else 'Mix'}. Schreibe einen kurzen, werblichen Satz (max 10 Wörter), warum dieser Tarif toll ist (z.B. 'Perfekt für maximale Flexibilität'). Erwähne KEINEN Verbrauch."
@@ -97,8 +117,9 @@ async def pitch_endpoint(req: PitchRequest):
         
         pitch = llm_service.generate_answer(prompt)
         
-        # Cache the result for this session/run
-        PITCH_CACHE[req.product_name] = pitch
+        # Cache the result
+        if redis_client:
+            redis_client.set(cache_key, pitch, ex=3600*24) # Cache for 24 hours
         
         return {"pitch": pitch}
     except Exception as e:
