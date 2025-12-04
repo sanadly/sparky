@@ -89,8 +89,11 @@ source venv/bin/activate
 # Installieren
 pip install -r requirements.txt
 
-# Starten (mit Gunicorn)
-./start_prod.sh
+# Starten (API)
+./run.sh
+
+# Starten (Email Worker)
+python -m backend.email_worker
 ```
 
 ### Frontend

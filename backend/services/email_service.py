@@ -180,7 +180,7 @@ class EmailService:
         """
         while True:
             try:
-                logger.info("📧 Polling for new emails...")
+                logger.debug("📧 Polling for new emails...")
                 new_emails = await asyncio.to_thread(self.check_new_emails)
                 
                 for email in new_emails:
