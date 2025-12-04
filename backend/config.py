@@ -37,13 +37,13 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = ""
 
     # Email Configuration
-    SMTP_SERVER: str = ""
+    SMTP_SERVER: str = "mx2eed.netcup.net"
     SMTP_PORT: int = 465
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
+    SMTP_USER: str = "your_email@domain.com"
+    SMTP_PASSWORD: str = "your_password"
     
     # IMAP Configuration
-    IMAP_SERVER: str = ""
+    IMAP_SERVER: str = "mx2eed.netcup.net"
     IMAP_PORT: int = 993
 
     # Redis Configuration

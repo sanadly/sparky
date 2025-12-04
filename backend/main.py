@@ -56,9 +56,10 @@ async def chat_endpoint(msg: UserMessage):
     response = await chat_service.handle_message(msg.user_id, msg.message)
     
     # Ensure all keys are present for frontend
+    current_session = await session_manager.get_session(msg.user_id)
     return {
         "reply": response.get("reply"),
-        "state": response.get("state", session_manager.get_session(msg.user_id)["state"]),
+        "state": response.get("state", current_session["state"]),
         "ui_data": response.get("ui_data")
     }
 

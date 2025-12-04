@@ -491,7 +491,9 @@ class ChatService:
                     
                 offer_id = offer_data.get("displayId") or offer_data.get("offer_id") or offer_data.get("ID") or offer_data.get("Angebotsnummer") or offer_data.get("ObjectID") or offer.get("offer_id")
             
-                product_name = session["data"].get("product_name", "Stromtarif")
+                product_name = session["data"].get("product_name")
+                if not product_name:
+                    product_name = "Stromtarif"
                 
                 price_text = session["data"].get("simulated_price")
                 if not price_text:
@@ -507,7 +509,7 @@ class ChatService:
                     price=price_text
                 )
 
-                session_manager.reset_session(user_id)
+                await session_manager.reset_session(user_id)
                 session["state"] = STATE_START
                 session["data"] = {}
                 
@@ -651,6 +653,9 @@ class ChatService:
                 product_name = products[0].get('bezeichnung')
             
         full_product = next((p for p in products if p.get('produktId') == product_id), None)
+        
+        if full_product and not product_name:
+            product_name = full_product.get('bezeichnung') or full_product.get('name')
         
         if data.get("consumption_r2"):
             consumption_r1 = data["consumption_r1"]
