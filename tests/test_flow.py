@@ -26,7 +26,8 @@ def test_flow():
     
     def send(msg):
         print(f"User: {msg}")
-        res = requests.post(url, json={"user_id": user_id, "message": msg, "channel": "test"}).json()
+        headers = {"X-API-Key": "secret-api-key"}
+        res = requests.post(url, json={"user_id": user_id, "message": msg, "channel": "test"}, headers=headers).json()
         print(f"Bot: {res['reply']}")
         return res['reply']
 

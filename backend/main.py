@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Security, status
+from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
@@ -17,6 +18,17 @@ from .services.chat_service import chat_service, email_service
 # Configure logging
 setup_logging()
 logger = logging.getLogger(__name__)
+
+# Security
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+async def verify_api_key(api_key: str = Security(api_key_header)):
+    if settings.API_KEY and api_key != settings.API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Could not validate credentials"
+        )
+    return api_key
 
 # FastAPI App
 @asynccontextmanager
@@ -50,7 +62,7 @@ else:
     async def read_index():
         return FileResponse('index.html')
 
-@app.post("/api/chat")
+@app.post("/api/chat", dependencies=[Security(verify_api_key)])
 async def chat_endpoint(msg: UserMessage):
     logger.info(f"Received message from {msg.user_id}: {msg.message}")
     response = await chat_service.handle_message(msg.user_id, msg.message)
@@ -71,7 +83,7 @@ PITCH_CACHE = {
     "INTENSIVE Day & Night Demo-Produkt 24": "**Tag & Nacht** sparen: Der perfekte Mix für deinen Bedarf! ⚡"
 }
 
-@app.post("/api/pitch")
+@app.post("/api/pitch", dependencies=[Security(verify_api_key)])
 async def pitch_endpoint(req: PitchRequest):
     try:
         # Check Cache first

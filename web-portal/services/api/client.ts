@@ -9,6 +9,7 @@ export class ApiClient {
         const url = `${this.baseUrl}${endpoint}`;
         const headers = {
             'Content-Type': 'application/json',
+            'X-API-Key': import.meta.env.VITE_API_KEY || '',
             ...options.headers,
         };
 

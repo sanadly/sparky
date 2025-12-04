@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     # Telegram
     TELEGRAM_BOT_TOKEN: str = ""
 
+    # Security
+    API_KEY: str = "secret-api-key"
+
     # Email Configuration
     SMTP_SERVER: str = "mx2eed.netcup.net"
     SMTP_PORT: int = 465

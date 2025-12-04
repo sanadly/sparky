@@ -46,20 +46,21 @@ def test_backend_integration():
     time.sleep(2) # Wait for server to start
     
     url = "http://127.0.0.1:8001/api/chat"
+    headers = {"X-API-Key": "secret-api-key"}
     
     # Test 1: Greeting
     payload = {"user_id": "test_user", "message": "Hallo", "channel": "test"}
-    res = requests.post(url, json=payload).json()
+    res = requests.post(url, json=payload, headers=headers).json()
     print(f"Greeting Response: {res}")
     
     # Test 2: Tariff
     payload = {"user_id": "test_user", "message": "Zeig mir Tarife", "channel": "test"}
-    res = requests.post(url, json=payload).json()
+    res = requests.post(url, json=payload, headers=headers).json()
     print(f"Tariff Response: {res}")
     
     # Test 3: LLM Fallback
     payload = {"user_id": "test_user", "message": "Was ist der Sinn des Lebens?", "channel": "test"}
-    res = requests.post(url, json=payload).json()
+    res = requests.post(url, json=payload, headers=headers).json()
     print(f"LLM Response: {res}")
     print("-" * 20)
 
