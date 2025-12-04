@@ -25,7 +25,18 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(email_service.run_email_polling(chat_service))
     yield
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(lifespan=lifespan)
+
+# CORS Configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for now (can be restricted in prod)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Static Files
 if os.path.exists("web-portal/dist"):
