@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     OFFER_URL: str = "https://intense-ag-development.it-cpi018-rt.cfapps.eu10-003.hana.ondemand.com/http/v1/servicecloud/create/offer"
     
     # Gemini Configuration
-    GEMINI_API_KEY: str = "AIzaSyCiB2LGBqjtm3v_0UUOsBDhmCP2gLvx2kk"
+    GEMINI_API_KEY: str = ""
     GEMINI_API_KEY_2: str = ""
     GEMINI_MODEL: str = "models/gemini-flash-latest"
     
@@ -37,13 +37,13 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = ""
 
     # Email Configuration
-    SMTP_SERVER: str = "mx2eed.netcup.net"
+    SMTP_SERVER: str = ""
     SMTP_PORT: int = 465
-    SMTP_USER: str = "tarifrechner@srv-x.de"
-    SMTP_PASSWORD: str = "453wA^xd35$2m28Kzmub68@zC91"
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
     
     # IMAP Configuration
-    IMAP_SERVER: str = "mx2eed.netcup.net"
+    IMAP_SERVER: str = ""
     IMAP_PORT: int = 993
 
     model_config = SettingsConfigDict(env_file=".env", env_ignore_empty=True, extra="ignore")
