@@ -35,7 +35,7 @@ async def verify_api_key(api_key: str = Security(api_key_header)):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     asyncio.create_task(session_manager.cleanup_loop())
-    asyncio.create_task(email_service.run_email_polling(chat_service))
+    # Email polling is now handled by a separate worker (backend/email_worker.py)
     yield
 
 from fastapi.middleware.cors import CORSMiddleware
