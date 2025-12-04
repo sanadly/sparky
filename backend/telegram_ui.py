@@ -25,16 +25,35 @@ class TelegramUI:
     def create_consumption_input_keyboard():
         keyboard = [
             [InlineKeyboardButton("1500 kWh", callback_data="cons:1500"), InlineKeyboardButton("2500 kWh", callback_data="cons:2500")],
-            [InlineKeyboardButton("3500 kWh", callback_data="cons:3500"), InlineKeyboardButton("5000 kWh", callback_data="cons:5000")]
+            [InlineKeyboardButton("3500 kWh", callback_data="cons:3500"), InlineKeyboardButton("5000 kWh", callback_data="cons:5000")],
+            [InlineKeyboardButton("✏️ Anderer Wert", callback_data="cons:manual")]
         ]
         return InlineKeyboardMarkup(keyboard)
 
     @staticmethod
     def create_date_input_keyboard():
-        # Static dates for now, could be dynamic
+        from datetime import datetime, timedelta
+        from dateutil.relativedelta import relativedelta
+        
+        today = datetime.now()
+        
+        # Helper to get 1st of next month
+        def get_next_month_first(date_obj):
+            if date_obj.day == 1:
+                return date_obj + relativedelta(months=1)
+            return (date_obj.replace(day=1) + relativedelta(months=1))
+
+        next_month = get_next_month_first(today)
+        in_3_months = next_month + relativedelta(months=3)
+        in_1_year = next_month + relativedelta(years=1)
+        
+        fmt = "%d.%m.%Y"
+        
         keyboard = [
-            [InlineKeyboardButton("01.01.2026", callback_data="date:01.01.2026"), InlineKeyboardButton("01.02.2026", callback_data="date:01.02.2026")],
-            [InlineKeyboardButton("01.03.2026", callback_data="date:01.03.2026")]
+            [InlineKeyboardButton(f"Ab {next_month.strftime(fmt)}", callback_data=f"date:{next_month.strftime(fmt)}")],
+            [InlineKeyboardButton(f"In 3 Monaten ({in_3_months.strftime(fmt)})", callback_data=f"date:{in_3_months.strftime(fmt)}")],
+            [InlineKeyboardButton(f"In 1 Jahr ({in_1_year.strftime(fmt)})", callback_data=f"date:{in_1_year.strftime(fmt)}")],
+            [InlineKeyboardButton("✏️ Anderes Datum", callback_data="date:manual")]
         ]
         return InlineKeyboardMarkup(keyboard)
 

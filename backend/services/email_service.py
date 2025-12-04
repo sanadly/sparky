@@ -8,6 +8,8 @@ import logging
 import asyncio
 import os
 from jinja2 import Environment, FileSystemLoader
+import redis.asyncio as redis
+from datetime import datetime
 from ..config import settings
 
 logger = logging.getLogger(__name__)
@@ -24,6 +26,11 @@ class EmailService:
         # Jinja2 Setup
         template_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates')
         self.env = Environment(loader=FileSystemLoader(template_dir))
+        
+        # Redis for Rate Limiting
+        self.redis = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        self.rate_limit_window = 3600 # 1 hour
+        self.rate_limit_max = 10 # 10 emails per hour
 
     async def send_offer_email(self, to_email: str, offer_id: str, product_name: str, consumption: str, price: str):
         """
@@ -62,7 +69,8 @@ class EmailService:
                 offer_id=offer_id,
                 product_name=product_name,
                 consumption=consumption,
-                price=price
+                price=price,
+                year=datetime.now().year
             )
         except Exception as e:
             logger.error(f"Template rendering failed: {e}")
@@ -115,9 +123,10 @@ class EmailService:
             logger.error(f"❌ Failed to send generic email: {e}")
             return False
 
-    def check_new_emails(self):
+    def check_new_emails(self, batch_size=10):
         """
         Connects to IMAP, checks for UNSEEN messages, and returns a list of dicts.
+        Limits processing to 'batch_size' emails.
         """
         new_emails = []
         try:
@@ -130,6 +139,10 @@ class EmailService:
                 return []
 
             email_ids = messages[0].split()
+            
+            # Batch Processing: Process only the first 'batch_size' emails
+            email_ids = email_ids[:batch_size]
+            
             for e_id in email_ids:
                 status, msg_data = mail.fetch(e_id, "(RFC822)")
                 for response_part in msg_data:
@@ -174,6 +187,30 @@ class EmailService:
             logger.error(f"❌ Error checking emails: {e}")
             return []
 
+    async def check_rate_limit(self, sender_email: str) -> bool:
+        """
+        Checks if the sender has exceeded the rate limit.
+        Returns True if allowed, False if blocked.
+        """
+        try:
+            key = f"rate_limit:email:{sender_email}"
+            current = await self.redis.get(key)
+            
+            if current and int(current) >= self.rate_limit_max:
+                return False
+            
+            # Increment and set expiry if new
+            pipe = self.redis.pipeline()
+            pipe.incr(key)
+            if not current:
+                pipe.expire(key, self.rate_limit_window)
+            await pipe.execute()
+            
+            return True
+        except Exception as e:
+            logger.error(f"Rate limit check failed: {e}")
+            return True # Fail open to not block valid users on redis error
+
     async def run_email_polling(self, chat_service_instance):
         """
         Runs the email polling loop.
@@ -181,7 +218,8 @@ class EmailService:
         while True:
             try:
                 logger.debug("📧 Polling for new emails...")
-                new_emails = await asyncio.to_thread(self.check_new_emails)
+                # Fetch max 10 emails at a time
+                new_emails = await asyncio.to_thread(self.check_new_emails, batch_size=10)
                 
                 for email in new_emails:
                     sender = email["sender"]
@@ -189,6 +227,11 @@ class EmailService:
                     body = email["body"]
                     
                     logger.info(f"📩 Processing email from {sender}: {subject}")
+                    
+                    # Rate Limiting Check
+                    if not await self.check_rate_limit(sender):
+                        logger.warning(f"⛔ Rate limit exceeded for {sender}. Ignoring email.")
+                        continue
                     
                     # Clean up body (remove quoted replies)
                     cleaned_body = body

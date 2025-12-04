@@ -20,6 +20,11 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     # Handle Network Errors gracefully (don't spam stack trace)
     if isinstance(error, (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout)):
         logger.warning(f"⚠️ Telegram Network Error: {error}")
+        if isinstance(update, Update) and update.effective_message:
+             try:
+                 await update.effective_message.reply_text("⚠️ Verbindungsproblem. Bitte versuche es gleich noch einmal.")
+             except:
+                 pass
         return
 
     # Check for NetworkError wrapper from telegram
@@ -28,6 +33,12 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
          return
 
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
+    
+    if isinstance(update, Update) and update.effective_message:
+        try:
+            await update.effective_message.reply_text("⚠️ Ein unerwarteter Fehler ist aufgetreten. Bitte versuche es später noch einmal.")
+        except:
+            pass
 
 
 def create_keyboard(ui_data: dict) -> InlineKeyboardMarkup | None:
@@ -45,8 +56,15 @@ def create_keyboard(ui_data: dict) -> InlineKeyboardMarkup | None:
         for p in products:
             p_name = p.get("name", "Produkt")
             p_id = p.get("id")
+            # Format price to 2 decimal places
+            try:
+                price_val = float(p.get('workingPrice', 0))
+                price_str = f"{price_val:.2f}".replace('.', ',')
+            except:
+                price_str = str(p.get('workingPrice'))
+                
             # Truncate callback data to fit 64 bytes limit if needed, but ID should be short
-            keyboard.append([InlineKeyboardButton(f"⚡ {p_name} ({p.get('workingPrice')} ct/kWh)", callback_data=f"prod:{p_id}")])
+            keyboard.append([InlineKeyboardButton(f"⚡ {p_name} ({price_str} ct/kWh)", callback_data=f"prod:{p_id}")])
     
     elif ui_type == "consumption_input":
         keyboard = [
@@ -93,6 +111,8 @@ async def send_backend_request(user_id: str, message: str, context: ContextTypes
     # Send "Typing..." action
     await context.bot.send_chat_action(chat_id=chat_id, action=constants.ChatAction.TYPING)
     
+    headers = {"X-API-Key": settings.API_KEY}
+    
     payload = {
         "user_id": user_id,
         "message": message,
@@ -101,7 +121,7 @@ async def send_backend_request(user_id: str, message: str, context: ContextTypes
     
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(BACKEND_URL, json=payload, timeout=30.0)
+            response = await client.post(BACKEND_URL, json=payload, headers=headers, timeout=30.0)
             response.raise_for_status()
             data = response.json()
             
@@ -130,7 +150,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Reset session silently
     try:
         async with httpx.AsyncClient() as client:
-            await client.post(BACKEND_URL, json={"user_id": user_id, "message": "reset", "channel": "telegram"}, timeout=5.0)
+            await client.post(BACKEND_URL, json={"user_id": user_id, "message": "reset", "channel": "telegram"}, headers={"X-API-Key": settings.API_KEY}, timeout=5.0)
     except:
         pass
         
@@ -162,7 +182,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     elif data.startswith("date:"):
         date_val = data.split(":", 1)[1]
-        message_to_send = "Morgen" if date_val == "tomorrow" else date_val
+        message_to_send = "manual" if date_val == "manual" else date_val
             
     elif data.startswith("cmd:"):
         cmd = data.split(":", 1)[1]

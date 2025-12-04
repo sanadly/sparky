@@ -53,6 +53,10 @@ class ChatService:
         # Global Intents
         if "reset" in text_lower or "start" in text_lower:
             await session_manager.reset_session(user_id)
+            # Update local session object to reflect reset
+            session["data"] = {}
+            session["state"] = STATE_START
+            
             response = {
                  "reply": "**Hallo!** 👋 Ich bin **Sparky**, dein Energieberater der INTENSE AG.\n\nMöchtest du unsere Tarife sehen, eine Simulation starten oder hast du eine Frage?",
                  "state": STATE_START,
@@ -189,6 +193,12 @@ class ChatService:
         }
 
     async def _handle_consumption(self, session, text):
+        if text == "manual":
+             return {
+                 "reply": "Bitte gib deinen Jahresverbrauch in kWh ein (z.B. 4200).",
+                 "state": STATE_WAITING_FOR_CONSUMPTION
+             }
+
         products = session["data"].get("products", [])
         p_id, p_name = self.product_service.find_product_in_text(text, products)
         
@@ -228,7 +238,15 @@ class ChatService:
                          session["data"]["consumption_r1"] = entities["consumption_r1"]
                          session["data"]["consumption_r2"] = entities["consumption_r2"]
                          return await self._run_simulation(session)
-                     pass 
+                     
+                     # Default split for single value input on DT
+                     total_cons = int(entities["consumption"])
+                     r1 = int(total_cons * 0.7)
+                     r2 = total_cons - r1
+                     session["data"]["consumption"] = total_cons
+                     session["data"]["consumption_r1"] = r1
+                     session["data"]["consumption_r2"] = r2
+                     return await self._run_simulation(session)
                 else:
                     session["data"]["consumption"] = entities["consumption"]
                     session["data"]["consumption_r1"] = entities["consumption"]
@@ -271,12 +289,16 @@ class ChatService:
             is_dt = full_product and (full_product.get('etDt') == 'DT' or full_product.get('preisNT') is not None)
             
             if is_dt:
-                 msg = f"Für den Tarif {full_product.get('bezeichnung')} (Doppeltarif) benötige ich deinen Verbrauch für Tag (HT) und Nacht (NT) separat. Bitte nenne mir beide Werte."
-                 return {
-                     "reply": msg,
-                     "state": STATE_WAITING_FOR_CONSUMPTION,
-                     "ui_data": {"type": "consumption_input", "is_dt": True}
-                 }
+                 # Default split for single value input on DT
+                 total_cons = int(entities["consumption"])
+                 r1 = int(total_cons * 0.7)
+                 r2 = total_cons - r1
+                 session["data"]["consumption"] = total_cons
+                 session["data"]["consumption_r1"] = r1
+                 session["data"]["consumption_r2"] = r2
+                 
+                 if "product_name" in session["data"]:
+                      return await self._run_simulation(session)
 
             session["data"]["consumption"] = entities["consumption"]
             session["data"]["consumption_r1"] = entities["consumption"]
@@ -423,6 +445,12 @@ class ChatService:
         return {"reply": self.intent_service.generate_answer(text, context)}
 
     async def _handle_date(self, session, text, user_id):
+        if text == "manual":
+             return {
+                 "reply": "Bitte gib dein gewünschtes Startdatum ein (z.B. 01.05.2026).",
+                 "state": STATE_WAITING_FOR_DATE
+             }
+
         entities = self.intent_service.extract_entities(text)
         if "date" in entities:
             start_date = entities["date"]
@@ -461,7 +489,9 @@ class ChatService:
         
         try:
             token = await self.sap_client.get_token()
-            product_id = session["data"].get("product_id", "INT12_DEMO_PROD")
+            product_id = session["data"].get("product_id")
+            if not product_id:
+                 return {"reply": "Entschuldigung, die Sitzung ist abgelaufen oder ungültig. Bitte starte neu mit 'Hallo'."}
             
             consumption = session["data"].get("consumption", "2500")
             
@@ -709,8 +739,10 @@ class ChatService:
 
         price_text = f"{price:.2f}€" if price is not None else "auf Anfrage"
         
+        summary = f"📋 **Deine Auswahl:**\nTarif: {product_name}\nVerbrauch: {data['consumption']} kWh\n\n"
+        
         return {
-            "reply": f"Der Tarif {product_name} kostet dich ca. {price_text} im Jahr. Möchtest du ein Angebot?",
+            "reply": f"{summary}Der Tarif {product_name} kostet dich ca. {price_text} im Jahr. Möchtest du ein Angebot?",
             "state": STATE_SIMULATION_DONE,
             "ui_data": {
                 "type": "simulation_result",
