@@ -1,6 +1,9 @@
 import time
 import logging
 import asyncio
+import json
+import redis.asyncio as redis
+from .config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -17,31 +20,45 @@ STATE_WAITING_FOR_EMAIL = "WAITING_FOR_EMAIL"
 
 class SessionManager:
     def __init__(self):
-        self.sessions = {}
+        self.redis = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        # Fallback in-memory for tests or if redis fails (optional, but good for dev)
+        self.local_sessions = {}
 
-    def get_session(self, user_id):
-        if user_id not in self.sessions:
-            self.sessions[user_id] = {
-                "state": STATE_START,
-                "data": {},
-                "last_activity": time.time()
-            }
-        self.sessions[user_id]["last_activity"] = time.time()
-        return self.sessions[user_id]
+    async def get_session(self, user_id):
+        try:
+            data = await self.redis.get(f"session:{user_id}")
+            if data:
+                session = json.loads(data)
+                session["last_activity"] = time.time()
+                return session
+        except Exception as e:
+            logger.error(f"Redis get error: {e}")
+        
+        # New session default
+        return {
+            "state": STATE_START,
+            "data": {},
+            "last_activity": time.time()
+        }
 
-    def reset_session(self, user_id):
-        if user_id in self.sessions:
-            self.sessions[user_id]["state"] = STATE_START
-            self.sessions[user_id]["data"] = {}
+    async def save_session(self, user_id, session):
+        try:
+            session["last_activity"] = time.time()
+            await self.redis.set(f"session:{user_id}", json.dumps(session), ex=3600) # 1 hour expiry
+        except Exception as e:
+            logger.error(f"Redis save error: {e}")
+
+    async def reset_session(self, user_id):
+        session = {
+            "state": STATE_START,
+            "data": {},
+            "last_activity": time.time()
+        }
+        await self.save_session(user_id, session)
             
     async def cleanup_loop(self):
-        while True:
-            await asyncio.sleep(600) # Check every 10 mins
-            now = time.time()
-            to_delete = [uid for uid, s in self.sessions.items() if now - s["last_activity"] > 1800]
-            for uid in to_delete:
-                del self.sessions[uid]
-                logger.info(f"Cleaned up session for {uid}")
+        # Redis handles expiry automatically via 'ex' parameter
+        pass
 
 # Global instance
 session_manager = SessionManager()

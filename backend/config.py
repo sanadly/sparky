@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     IMAP_SERVER: str = ""
     IMAP_PORT: int = 993
 
+    # Redis Configuration
+    REDIS_URL: str = "redis://localhost:6379/0"
+
     model_config = SettingsConfigDict(env_file=".env", env_ignore_empty=True, extra="ignore")
 
     def __init__(self, **kwargs):

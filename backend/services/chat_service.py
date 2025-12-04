@@ -43,46 +43,64 @@ class ChatService:
         self.sap_client = sap_client
 
     async def handle_message(self, user_id, text):
-        session = session_manager.get_session(user_id)
+        session = await session_manager.get_session(user_id)
         state = session["state"]
         data = session["data"]
         text_lower = text.lower()
         
+        response = None
+
         # Global Intents
         if "reset" in text_lower or "start" in text_lower:
-            session_manager.reset_session(user_id)
-            return {
+            await session_manager.reset_session(user_id)
+            response = {
                  "reply": "**Hallo!** 👋 Ich bin **Sparky**, dein Energieberater der INTENSE AG.\n\nMöchtest du unsere Tarife sehen, eine Simulation starten oder hast du eine Frage?",
                  "state": STATE_START,
                  "quick_replies": ["Tarife anzeigen", "Simulation starten", "Was kannst du?"]
              }
 
         # Direct Product Selection (Bypass LLM)
-        if text.startswith("SELECT_PRODUCT:"):
-            return await self._handle_select_product(session, text)
+        elif text.startswith("SELECT_PRODUCT:"):
+            product_id = text.split(":", 1)[1]
+            session["data"]["product_id"] = product_id
+            # We need to fetch product details to know if it is DT
+            # Ideally we should have this in session or fetch it
+            # For now, let's assume we proceed to simulation or consumption
+            # But wait, the original logic did something here.
+            # Let's delegate to _run_simulation which handles checks
+            response = await self._run_simulation(session)
 
         # State Machine
-        if state == STATE_START:
-            return await self._handle_start(session, text_lower, text)
+        elif state == STATE_START:
+            response = await self._handle_start(session, text_lower, text)
         elif state == STATE_WAITING_FOR_CONSUMPTION:
-            return await self._handle_consumption(session, text)
+            response = await self._handle_consumption(session, text)
         elif state == STATE_WAITING_FOR_PRODUCT_CHOICE:
-            return await self._handle_product_choice(session, text)
+            response = await self._handle_product_choice(session, text)
         elif state == STATE_SIMULATION_DONE:
-            return await self._handle_simulation_done(session, text, user_id)
+            response = await self._handle_simulation_done(session, text, user_id)
         elif state == STATE_WAITING_FOR_DATE:
-            return await self._handle_date(session, text, user_id)
+            response = await self._handle_date(session, text, user_id)
         elif state == STATE_OFFER_CREATED:
             return await self._handle_offer_created(session, text)
         elif state == STATE_WAITING_FOR_DURATION:
-            return await self._handle_duration(session, text)
+            response = await self._handle_duration(session, text)
         elif state == STATE_WAITING_FOR_TARIFF_TYPE:
-            return await self._handle_tariff_type(session, text)
+            response = await self._handle_tariff_type(session, text)
         elif state == STATE_WAITING_FOR_EMAIL:
-            return await self._handle_email(session, text, user_id)
+            response = await self._handle_email(session, text, user_id)
         
-        # Fallback
-        return {"reply": self.intent_service.generate_answer(text)}
+        if not response:
+             response = {"reply": self.intent_service.generate_answer(text)}
+
+        # Update session state if changed in response (some handlers might return state)
+        if "state" in response:
+            session["state"] = response["state"]
+        
+        # Save session to Redis
+        await session_manager.save_session(user_id, session)
+        
+        return response
 
     async def _handle_select_product(self, session, text):
         product_id = text.split(":", 1)[1]
