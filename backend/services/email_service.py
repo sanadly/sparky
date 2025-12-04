@@ -6,6 +6,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import logging
 import asyncio
+import os
+from jinja2 import Environment, FileSystemLoader
 from ..config import settings
 
 logger = logging.getLogger(__name__)
@@ -18,6 +20,10 @@ class EmailService:
         self.smtp_password = settings.SMTP_PASSWORD
         self.imap_server = settings.IMAP_SERVER
         self.imap_port = settings.IMAP_PORT
+        
+        # Jinja2 Setup
+        template_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates')
+        self.env = Environment(loader=FileSystemLoader(template_dir))
 
     async def send_offer_email(self, to_email: str, offer_id: str, product_name: str, consumption: str, price: str):
         """
@@ -49,87 +55,19 @@ class EmailService:
         """
 
         # HTML Body
-        html_body = f"""
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Dein Angebot</title>
-            <style>
-              body {{ font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f0f2f5; margin: 0; padding: 0; color: #1a1a1a; }}
-              .container {{ max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }}
-              .header {{ background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 40px 30px; text-align: center; color: #ffffff; }}
-              .header h1 {{ margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px; color: #38bdf8; text-transform: uppercase; }}
-              .header p {{ margin: 10px 0 0; font-size: 16px; color: #94a3b8; font-weight: 500; }}
-              .content {{ padding: 40px 30px; }}
-              .greeting {{ font-size: 18px; margin-bottom: 25px; line-height: 1.5; color: #334155; }}
-              .offer-card {{ background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 0; overflow: hidden; margin: 25px 0; }}
-              .offer-row {{ display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #e2e8f0; }}
-              .offer-row:last-child {{ border-bottom: none; background-color: #f1f5f9; }}
-              .label {{ color: #64748b; font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; }}
-              .value {{ font-weight: 700; color: #0f172a; font-size: 16px; text-align: right; }}
-              .price-value {{ color: #0284c7; font-size: 22px; font-weight: 800; }}
-              .cta-section {{ text-align: center; margin-top: 35px; padding-top: 20px; border-top: 1px solid #f1f5f9; }}
-              .cta-text {{ color: #64748b; font-size: 14px; margin-bottom: 10px; }}
-              .footer {{ background-color: #1e293b; padding: 30px 20px; text-align: center; font-size: 12px; color: #94a3b8; }}
-              .footer p {{ margin: 5px 0; }}
-              a {{ color: #38bdf8; text-decoration: none; }}
-              /* Mobile Responsiveness */
-              @media only screen and (max-width: 600px) {{
-                .container {{ margin: 0; border-radius: 0; }}
-                .content {{ padding: 20px; }}
-                .header {{ padding: 30px 20px; }}
-              }}
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <div class="header">
-                <h1>⚡ Intense Energy</h1>
-                <p>Dein persönliches Angebot</p>
-              </div>
-              
-              <div class="content">
-                <p class="greeting">Hallo!</p>
-                <p style="color: #475569; line-height: 1.6;">Vielen Dank für dein Interesse. Wir haben folgendes Angebot exklusiv für dich berechnet:</p>
-                
-                <div class="offer-card">
-                  <div class="offer-row">
-                    <span class="label">Angebotsnummer</span>
-                    <span class="value">{offer_id}</span>
-                  </div>
-                  <div class="offer-row">
-                    <span class="label">Tarif</span>
-                    <span class="value">{product_name}</span>
-                  </div>
-                  <div class="offer-row">
-                    <span class="label">Jahresverbrauch</span>
-                    <span class="value">{consumption} kWh</span>
-                  </div>
-                  <div class="offer-row">
-                    <span class="label">Geschätzter Preis</span>
-                    <span class="value price-value">{price}</span>
-                  </div>
-                </div>
-                
-                <div class="cta-section">
-                  <p class="cta-text">
-                    Hast du Fragen oder möchtest du das Angebot annehmen?<br>
-                    <strong>Antworte einfach auf diese E-Mail.</strong>
-                  </p>
-                </div>
-              </div>
-              
-              <div class="footer">
-                <p>Intense Energy GmbH | Musterstraße 123 | 12345 Musterstadt</p>
-                <p>Tel: 0123 456789 | E-Mail: tarifrechner@srv-x.de</p>
-                <p style="margin-top: 15px; font-size: 10px; opacity: 0.6;">&copy; 2025 Intense Energy GmbH. Alle Rechte vorbehalten.</p>
-              </div>
-            </div>
-          </body>
-        </html>
-        """
+        # HTML Body (Rendered via Jinja2)
+        try:
+            template = self.env.get_template('offer_email.html')
+            html_body = template.render(
+                offer_id=offer_id,
+                product_name=product_name,
+                consumption=consumption,
+                price=price
+            )
+        except Exception as e:
+            logger.error(f"Template rendering failed: {e}")
+            # Fallback to simple HTML if template fails
+            html_body = f"<html><body><h1>Angebot {offer_id}</h1><p>Preis: {price}</p></body></html>"
 
         msg = MIMEMultipart("alternative")
         msg['From'] = self.smtp_user
