@@ -9,3 +9,4 @@ pydantic-settings
 httpx
 openai
 redis
+python-json-logger
