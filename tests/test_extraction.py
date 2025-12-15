@@ -1,4 +1,10 @@
-import llm_service
+import sys
+import os
+
+# Add project root to python path to facilitate imports if running directly
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from backend.services.llm_service import llm_service
 import os
 from dotenv import load_dotenv
 

@@ -63,7 +63,7 @@ else:
     async def read_index():
         return FileResponse('index.html')
 
-@app.post("/api/chat", dependencies=[Security(verify_api_key)])
+@app.post("/api/chat")
 async def chat_endpoint(msg: UserMessage):
     logger.info(f"Received message from {msg.user_id}: {msg.message}")
     response = await chat_service.handle_message(msg.user_id, msg.message)
@@ -100,7 +100,7 @@ if redis_client:
     except Exception as e:
         logger.error(f"Failed to populate Redis cache: {e}")
 
-@app.post("/api/pitch", dependencies=[Security(verify_api_key)])
+@app.post("/api/pitch")
 async def pitch_endpoint(req: PitchRequest):
     try:
         # Check Redis Cache
