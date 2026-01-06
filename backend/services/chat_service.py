@@ -42,6 +42,33 @@ class ChatService:
         self.email_service = email_service
         self.sap_client = sap_client
 
+    def _filter_products(self, products, session_data):
+        """Apply duration and tariff type filters from session to product list."""
+        filter_duration = session_data.get("filter_duration")
+        filter_tariff_type = session_data.get("filter_tariff_type")
+        
+        if not filter_duration and not filter_tariff_type:
+            return products
+        
+        filtered = []
+        for p in products:
+            # Duration filter
+            if filter_duration and filter_duration != "egal":
+                if int(p.get("laufzeit", 12)) != int(filter_duration):
+                    continue
+            
+            # Tariff type filter
+            if filter_tariff_type and filter_tariff_type != "egal":
+                is_double = p.get('etDt') == 'DT' or p.get('preisNT') is not None
+                if filter_tariff_type == "single" and is_double:
+                    continue
+                if filter_tariff_type == "double" and not is_double:
+                    continue
+            
+            filtered.append(p)
+        
+        return filtered if filtered else products  # Fallback to all if filters return nothing
+
     async def handle_message(self, user_id, text):
         session = await session_manager.get_session(user_id)
         state = session["state"]
@@ -67,11 +94,17 @@ class ChatService:
         elif text.startswith("SELECT_PRODUCT:"):
             product_id = text.split(":", 1)[1]
             session["data"]["product_id"] = product_id
-            # We need to fetch product details to know if it is DT
-            # Ideally we should have this in session or fetch it
-            # For now, let's assume we proceed to simulation or consumption
-            # But wait, the original logic did something here.
-            # Let's delegate to _run_simulation which handles checks
+            
+            # Look up product name from products list
+            products = session["data"].get("products", [])
+            if not products:
+                products = await self.product_service.get_products()
+                session["data"]["products"] = products
+            
+            product = next((p for p in products if p.get('produktId') == product_id), None)
+            if product:
+                session["data"]["product_name"] = product.get('bezeichnung') or product.get('name')
+            
             response = await self._run_simulation(session)
 
         # State Machine
@@ -312,10 +345,11 @@ class ChatService:
                 return await self._run_simulation(session)
             
             session["state"] = STATE_WAITING_FOR_PRODUCT_CHOICE
+            filtered_products = self._filter_products(session["data"].get("products", []), session["data"])
             return {
                 "reply": f"Verstanden, {entities['consumption']} kWh. Welchen der Tarife möchtest du wählen?",
                 "state": STATE_WAITING_FOR_PRODUCT_CHOICE,
-                "ui_data": await self.product_service.get_product_ui_data(session["data"].get("products", []), consumption=entities['consumption'], simulation_service=self.simulation_service)
+                "ui_data": await self.product_service.get_product_ui_data(filtered_products, consumption=entities['consumption'], simulation_service=self.simulation_service)
             }
         
         elif "consumption_r1" in entities and "consumption_r2" in entities:
@@ -327,10 +361,11 @@ class ChatService:
                  return await self._run_simulation(session)
                  
             session["state"] = STATE_WAITING_FOR_PRODUCT_CHOICE
+            filtered_products = self._filter_products(session["data"].get("products", []), session["data"])
             return {
                 "reply": f"Verstanden, {entities['consumption_r1']} kWh (HT) und {entities['consumption_r2']} kWh (NT). Welchen der Tarife möchtest du wählen?",
                 "state": STATE_WAITING_FOR_PRODUCT_CHOICE,
-                "ui_data": await self.product_service.get_product_ui_data(session["data"].get("products", []), consumption=int(entities['consumption_r1']) + int(entities['consumption_r2']), simulation_service=self.simulation_service)
+                "ui_data": await self.product_service.get_product_ui_data(filtered_products, consumption=int(entities['consumption_r1']) + int(entities['consumption_r2']), simulation_service=self.simulation_service)
             }
         
         elif "product_name" in entities:
@@ -377,9 +412,10 @@ class ChatService:
         
         if intent == "correction" and "consumption" in extraction:
             data["consumption"] = extraction["consumption"]
+            filtered_products = self._filter_products(data.get("products", []), data)
             return {
                 "reply": f"Okay, ich korrigiere den Verbrauch auf {data['consumption']} kWh. Welchen Tarif möchtest du wählen?",
-                "ui_data": await self.product_service.get_product_ui_data(data.get("products", []), consumption=data['consumption'], simulation_service=self.simulation_service)
+                "ui_data": await self.product_service.get_product_ui_data(filtered_products, consumption=data['consumption'], simulation_service=self.simulation_service)
             }
             
         elif "product_name" in extraction:
@@ -412,9 +448,10 @@ class ChatService:
                 return await self._run_simulation(session)
 
         if any(x in text.lower() for x in ["tarif", "zeig", "liste", "angebot", "welche"]):
-             return {
+            filtered_products = self._filter_products(data.get("products", []), data)
+            return {
                 "reply": "Hier sind unsere verfügbaren Tarife. Welchen möchtest du wählen?",
-                "ui_data": await self.product_service.get_product_ui_data(data.get("products", []), consumption=data.get("consumption"), simulation_service=self.simulation_service)
+                "ui_data": await self.product_service.get_product_ui_data(filtered_products, consumption=data.get("consumption"), simulation_service=self.simulation_service)
             }
 
         return {"reply": "Das habe ich nicht verstanden. Welchen Tarif möchtest du wählen? (Oder frag mich nach einer Empfehlung!)"}

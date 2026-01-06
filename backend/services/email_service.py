@@ -152,7 +152,10 @@ class EmailService:
                         # Decode Subject
                         subject, encoding = decode_header(msg["Subject"])[0]
                         if isinstance(subject, bytes):
-                            subject = subject.decode(encoding if encoding else "utf-8")
+                            try:
+                                subject = subject.decode(encoding if encoding else "utf-8")
+                            except (UnicodeDecodeError, LookupError):
+                                subject = subject.decode("latin-1", errors="replace")
                         
                         # Decode Sender
                         sender = msg.get("From")
@@ -164,10 +167,20 @@ class EmailService:
                                 content_type = part.get_content_type()
                                 content_disposition = str(part.get("Content-Disposition"))
                                 if content_type == "text/plain" and "attachment" not in content_disposition:
-                                    body = part.get_payload(decode=True).decode()
+                                    payload = part.get_payload(decode=True)
+                                    charset = part.get_content_charset() or "utf-8"
+                                    try:
+                                        body = payload.decode(charset)
+                                    except (UnicodeDecodeError, LookupError):
+                                        body = payload.decode("latin-1", errors="replace")
                                     break
                         else:
-                            body = msg.get_payload(decode=True).decode()
+                            payload = msg.get_payload(decode=True)
+                            charset = msg.get_content_charset() or "utf-8"
+                            try:
+                                body = payload.decode(charset)
+                            except (UnicodeDecodeError, LookupError):
+                                body = payload.decode("latin-1", errors="replace")
 
                         new_emails.append({
                             "sender": sender,

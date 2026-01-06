@@ -1,79 +1,223 @@
 <!DOCTYPE html>
 <html>
-  <head>
+<head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dein Angebot</title>
     <style>
-      body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f0f2f5; margin: 0; padding: 0; color: #1a1a1a; }
-      .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
-      .header { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 40px 30px; text-align: center; color: #ffffff; }
-      .header h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px; color: #38bdf8; text-transform: uppercase; }
-      .header p { margin: 10px 0 0; font-size: 16px; color: #94a3b8; font-weight: 500; }
-      .content { padding: 40px 30px; }
-      .greeting { font-size: 18px; margin-bottom: 25px; line-height: 1.5; color: #334155; }
-      .offer-card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 0; overflow: hidden; margin: 25px 0; }
-      .offer-row { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #e2e8f0; }
-      .offer-row:last-child { border-bottom: none; background-color: #f1f5f9; }
-      .label { color: #64748b; font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
-      .value { font-weight: 700; color: #0f172a; font-size: 16px; text-align: right; }
-      .price-value { color: #0284c7; font-size: 22px; font-weight: 800; }
-      .cta-section { text-align: center; margin-top: 35px; padding-top: 20px; border-top: 1px solid #f1f5f9; }
-      .cta-text { color: #64748b; font-size: 14px; margin-bottom: 10px; }
-      .footer { background-color: #1e293b; padding: 30px 20px; text-align: center; font-size: 12px; color: #94a3b8; }
-      .footer p { margin: 5px 0; }
-      a { color: #38bdf8; text-decoration: none; }
-      /* Mobile Responsiveness */
-      @media only screen and (max-width: 600px) {
-        .container { margin: 0; border-radius: 0; }
-        .content { padding: 20px; }
-        .header { padding: 30px 20px; }
-      }
+        /* Reset & Base */
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+            background-color: #f3f4f6; 
+            margin: 0; 
+            padding: 0; 
+            color: #1f2937; 
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        .wrapper {
+            width: 100%;
+            background-color: #f3f4f6;
+            padding: 40px 0;
+        }
+        
+        .main-table {
+            background-color: #ffffff;
+            margin: 0 auto;
+            width: 100%;
+            max-width: 600px;
+            border-radius: 8px;
+            border-collapse: collapse;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Header */
+        .header {
+            padding: 40px 40px 30px;
+            text-align: center;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        
+        .brand-name {
+            color: #2563eb;
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            text-transform: uppercase;
+        }
+        
+        /* Content */
+        .content {
+            padding: 40px;
+        }
+        
+        h2 {
+            font-size: 20px;
+            font-weight: 600;
+            margin: 0 0 16px;
+            color: #111827;
+        }
+        
+        .intro-text {
+            font-size: 16px;
+            line-height: 1.6;
+            color: #4b5563;
+            margin: 0 0 24px;
+        }
+        
+        /* Offer Table */
+        .offer-table {
+            width: 100%;
+            background-color: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 24px 0;
+        }
+        
+        .offer-table td {
+            padding: 16px 20px;
+            border-bottom: 1px dashed #e5e7eb;
+        }
+        
+        .offer-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .offer-table .label {
+            font-size: 14px;
+            color: #6b7280;
+            font-weight: 500;
+            width: 50%;
+        }
+        
+        .offer-table .value {
+            font-size: 15px;
+            color: #1f2937;
+            font-weight: 600;
+            text-align: right;
+            width: 50%;
+        }
+        
+        .offer-table .price-row td {
+            border-top: 1px solid #e5e7eb;
+            padding-top: 20px;
+        }
+        
+        .offer-table .price-row .label {
+            font-size: 16px;
+            color: #111827;
+            font-weight: 600;
+        }
+        
+        .offer-table .price-row .value {
+            color: #2563eb;
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+
+        /* CTA */
+        .cta-section {
+            text-align: center;
+            padding-top: 32px;
+        }
+        
+        .cta-text {
+            font-size: 15px;
+            color: #4b5563;
+            margin-bottom: 20px;
+        }
+        
+        .button {
+            display: inline-block;
+            background-color: #2563eb;
+            color: #ffffff !important;
+            padding: 14px 32px;
+            border-radius: 6px;
+            font-weight: 600;
+            text-decoration: none;
+            font-size: 16px;
+        }
+        
+        /* Footer */
+        .footer {
+            background-color: #f9fafb;
+            padding: 30px 40px;
+            text-align: center;
+            border-top: 1px solid #e5e7eb;
+        }
+        
+        .footer p {
+            font-size: 12px;
+            color: #9ca3af;
+            margin: 4px 0;
+        }
+
+        /* Responsive */
+        @media screen and (max-width: 600px) {
+            .wrapper { padding: 0; }
+            .main-table { border-radius: 0; }
+            .header, .content, .footer { padding: 24px !important; }
+            .offer-table td { padding: 12px 16px; }
+            .brand-name { font-size: 20px; }
+        }
     </style>
-  </head>
-  <body>
-    <div class="container">
-      <div class="header">
-        <h1>⚡ Intense Energy</h1>
-        <p>Dein persönliches Angebot</p>
-      </div>
-      
-      <div class="content">
-        <p class="greeting">Hallo!</p>
-        <p style="color: #475569; line-height: 1.6;">Vielen Dank für dein Interesse. Wir haben folgendes Angebot exklusiv für dich berechnet:</p>
-        
-        <div class="offer-card">
-          <div class="offer-row">
-            <span class="label">Angebotsnummer</span>
-            <span class="value">{{ offer_id }}</span>
-          </div>
-          <div class="offer-row">
-            <span class="label">Tarif</span>
-            <span class="value">{{ product_name }}</span>
-          </div>
-          <div class="offer-row">
-            <span class="label">Jahresverbrauch</span>
-            <span class="value">{{ consumption }} kWh</span>
-          </div>
-          <div class="offer-row">
-            <span class="label">Geschätzter Preis</span>
-            <span class="value price-value">{{ price }}</span>
-          </div>
-        </div>
-        
-        <div class="cta-section">
-          <p class="cta-text">
-            Hast du Fragen oder möchtest du das Angebot annehmen?<br>
-            <strong>Antworte einfach auf diese E-Mail.</strong>
-          </p>
-        </div>
-      </div>
-      
-      <div class="footer">
-        <p>Intense Energy GmbH | Energieallee 1 | 10115 Berlin</p>
-        <p>Tel: +49 30 12345678 | E-Mail: service@intense-energy.de</p>
-        <p style="margin-top: 15px; font-size: 10px; opacity: 0.6;">&copy; {{ year }} Intense Energy GmbH. Alle Rechte vorbehalten.</p>
-      </div>
+</head>
+<body>
+    <div class="wrapper">
+        <table class="main-table" cellpadding="0" cellspacing="0">
+            <!-- Header -->
+            <tr>
+                <td class="header">
+                    <span class="brand-name">⚡ INTENSE ENERGY</span>
+                </td>
+            </tr>
+
+            <!-- Content -->
+            <tr>
+                <td class="content">
+                    <h2>Hallo!</h2>
+                    <p class="intro-text">Vielen Dank für dein Interesse. Wir haben dein persönliches Angebot exklusiv berechnet:</p>
+                    
+                    <!-- Offer Details Table -->
+                    <table class="offer-table" cellpadding="0" cellspacing="0">
+                        <tr>
+                            <td class="label">Angebotsnummer</td>
+                            <td class="value">{{ offer_id }}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Tarif</td>
+                            <td class="value">{{ product_name }}</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Jahresverbrauch</td>
+                            <td class="value">{{ consumption }} kWh</td>
+                        </tr>
+                        <tr class="price-row">
+                            <td class="label">Geschätzter Preis</td>
+                            <td class="value">{{ price }}</td>
+                        </tr>
+                    </table>
+
+                    <!-- CTA -->
+                    <div class="cta-section">
+                        <p class="cta-text">Hast du Fragen oder möchtest du das Angebot annehmen?</p>
+                        <a href="mailto:service@intense-energy.de?subject=Re:%20Angebot%20{{ offer_id }}" class="button">Jetzt Antworten</a>
+                    </div>
+                </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+                <td class="footer">
+                    <p>Intense Energy GmbH • Energieallee 1 • 10115 Berlin</p>
+                    <p>Tel: +49 30 12345678</p>
+                    <p style="margin-top: 12px;">&copy; {{ year }} Intense Energy GmbH. Alle Rechte vorbehalten.</p>
+                </td>
+            </tr>
+        </table>
     </div>
-  </body>
+</body>
 </html>
